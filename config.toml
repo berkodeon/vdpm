@@ -1,0 +1,5 @@
+[settings]
+plugin_dir = ".config/vdpm"
+plugin_file = "plugins.csv"
+plugin_folder = ".visidata/plugins"
+
