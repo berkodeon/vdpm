@@ -1,0 +1,8 @@
+File event: Event { kind: Modify(Metadata(Any)), paths: ["/Users/berkodeon/.config/vdpm/plugins.csv"], attr:tracker: None, attr:flag: None, attr:info: None, attr:source: None }
+File event: Event { kind: Modify(Data(Content)), paths: ["/Users/berkodeon/.config/vdpm/plugins.csv"], attr:tracker: None, attr:flag: None, attr:info: None, attr:source: None }
+File event: Event { kind: Modify(Metadata(Any)), paths: ["/Users/berkodeon/.config/vdpm/plugins.csv"], attr:tracker: None, attr:flag: None, attr:info: None, attr:source: None }
+File event: Event { kind: Modify(Data(Content)), paths: ["/Users/berkodeon/.config/vdpm/plugins.csv"], attr:tracker: None, attr:flag: None, attr:info: None, attr:source: None }
+File event: Event { kind: Modify(Metadata(Any)), paths: ["/Users/berkodeon/.config/vdpm/plugins.csv"], attr:tracker: None, attr:flag: None, attr:info: None, attr:source: None }
+File event: Event { kind: Modify(Data(Content)), paths: ["/Users/berkodeon/.config/vdpm/plugins.csv"], attr:tracker: None, attr:flag: None, attr:info: None, attr:source: None }
+File event: Event { kind: Modify(Metadata(Any)), paths: ["/Users/berkodeon/.config/vdpm/plugins.csv"], attr:tracker: None, attr:flag: None, attr:info: None, attr:source: None }
+File event: Event { kind: Modify(Data(Content)), paths: ["/Users/berkodeon/.config/vdpm/plugins.csv"], attr:tracker: None, attr:flag: None, attr:info: None, attr:source: None }
