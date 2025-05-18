@@ -1,8 +1,11 @@
 use directories::BaseDirs;
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use polars::prelude::*;
+// use polars::prelude::SeriesUtf8;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
+use std::io::Cursor;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -19,6 +22,26 @@ struct Settings {
     plugin_dir: String,
     plugin_file: String,
     plugin_folder: String,
+}
+
+#[derive(Debug)]
+enum PluginOperationType {
+    Install,
+    Uninstall,
+    Enable,
+    Disable,
+}
+
+#[derive(Debug)]
+struct LineDiff {
+    old_entry: String,
+    new_entry: String,
+}
+
+#[derive(Debug)]
+struct PluginOperation {
+    operation: PluginOperationType,
+    plugin_name: String
 }
 
 fn read_config() -> Config {
@@ -69,23 +92,116 @@ fn calculate_sha256_from_str(content: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn diff_lines(old: &[String], new: &[String]) {
-    println!("Changed lines:");
-    for (i, (a, b)) in old.iter().zip(new.iter()).enumerate() {
-        if a != b {
-            println!("Line {} changed from {:?} to {:?}", i + 1, a, b);
+fn get_changes_structured(changes: &Vec<(&Series, &Series)>) -> Vec<LineDiff> {
+    let mut diffs = Vec::new();
+
+    for &(old_series, new_series) in changes {
+        let len = old_series.len();
+        assert_eq!(len, new_series.len(), "Series length mismatch");
+
+        let old_utf8 = old_series.utf8().expect("Expected Utf8 Series");
+        let new_utf8 = new_series.utf8().expect("Expected Utf8 Series");
+
+        for i in 0..len {
+            let old_val = old_utf8.get(i).unwrap_or("").to_string();
+            let new_val = new_utf8.get(i).unwrap_or("").to_string();
+
+            diffs.push(LineDiff {
+                old_entry: old_val,
+                new_entry: new_val,
+            });
         }
     }
 
-    if new.len() > old.len() {
-        for (i, line) in new[old.len()..].iter().enumerate() {
-            println!("Added line {}: {:?}", old.len() + i + 1, line);
-        }
-    } else if old.len() > new.len() {
-        for (i, line) in old[new.len()..].iter().enumerate() {
-            println!("Removed line {}: {:?}", new.len() + i + 1, line);
-        }
+    diffs
+}
+
+fn resolve_uninstalled_packages(vec: &Vec<LineDiff>) ->  {
+
+}
+
+fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOperation> {
+    let old_df = CsvReader::new(Cursor::new(new_csv))
+        .with_options(CsvReadOptions::default().with_has_header(true))
+        .finish()?;
+
+    let new_df = CsvReader::new(Cursor::new(old_csv))
+        .with_options(CsvReadOptions::default().with_has_header(true))
+        .finish()?;
+
+    let added = new_df.clone().as_single_chunk().join(
+        &old_df,
+        [key_column],
+        [key_column],
+        JoinArgs::new(JoinType::Anti),None
+    )?;
+    println!("Added rows:\n{}", added);
+
+    let removed = old_df.clone().as_single_chunk().join(
+        &new_df,
+        [key_column],
+        [key_column],
+        JoinArgs::new(JoinType::Anti),None
+    )?;
+    println!("Removed rows:\n{}", removed);
+
+    let common_old = old_df.clone().as_single_chunk().join(
+        &new_df,
+        [key_column],
+        [key_column],
+        JoinArgs::new(JoinType::Inner),None
+    )?;
+
+    let common_new = new_df.clone().as_single_chunk().join(
+        &old_df,
+        [key_column],
+        [key_column],
+        JoinArgs::new(JoinType::Inner),None
+    )?;
+
+    let changed = common_old
+        .iter()
+        .zip(common_new.iter())
+        .filter(|(a, b)| a != b)
+        .collect::<Vec<_>>();
+
+    if !added.is_empty() {
+        let operations: Vec<PluginOperation> = added
+            .get_rows()
+            .iter()
+            .map(|row| {
+                PluginOperation {
+                    operation: PluginOperationType::Install,
+                    plugin_name: row["name"],
+                }
+            })
+            .collect();
+
+
+
+        let line_diffs: Vec<LineDiff> = get_changes_structured(&added);
+        let packages_to_uninstall = resolve_uninstalled_packages(&line_diffs);
     }
+
+    if !changed.is_empty() {
+                let operations: Vec<PluginOperation> = changed
+            .get_rows()
+            .iter()
+            .map(|row| {
+                PluginOperation {
+                    operation: PluginOperationType::Install,
+                    plugin_name: row["name"],
+                }
+            })
+            .collect();
+    }
+
+    vec![
+        PluginOperation{
+            operation: PluginOperationType::Install,
+            plugin_name: String::from("odeonsmightyplugin")
+        }
+    ]
 }
 
 fn write_to_file(file_path: &str, content: &Vec<String>) -> io::Result<()> {
@@ -114,39 +230,37 @@ fn main() {
         return;
     }
 
-    let initial_content = fs::read_to_string(&plugins_file_path).unwrap_or_default();
-    let mut previous_lines: Vec<String> = initial_content.lines().map(|s| s.to_string()).collect();
-    let mut previous_hash = calculate_sha256_from_str(&initial_content);
+    let previous_content = fs::read_to_string(&plugins_file_path).unwrap_or_default();
+    let mut previous_hash = calculate_sha256_from_str(&previous_content);
 
-    let mut watcher = RecommendedWatcher::new({
-        let plugins_file_path = plugins_file_path.clone();
-        move |res: Result<Event, notify::Error>| match res {
-            Ok(event) => {
-                println!("File event {:#?}", event.kind);
+    let mut watcher = RecommendedWatcher::new(
+        {
+            let plugins_file_path = plugins_file_path.clone();
+            move |res: Result<Event, notify::Error>| match res {
+                Ok(event) => {
+                    println!("File event {:#?}", event.kind);
 
-                match fs::read_to_string(&plugins_file_path) {
-                    Ok(current_content) => {
-                        let current_hash = calculate_sha256_from_str(&current_content);
-                        if current_hash != previous_hash {
-                            let current_lines: Vec<String> =
-                                current_content.lines().map(|s| s.to_string()).collect();
-                            diff_lines(&previous_lines, &current_lines);
+                    match fs::read_to_string(&plugins_file_path) {
+                        Ok(current_content) => {
+                            let current_hash = calculate_sha256_from_str(&current_content);
+                            if current_hash != previous_hash {
+                                diff_lines(&previous_content, &current_content, "name");
 
-                            previous_hash = current_hash;
-                            previous_lines = current_lines;
-                        } else {
-                            println!("No actual content change (same hash).");
+                                previous_hash = current_hash;
+                            } else {
+                                println!("No actual content change (same hash).");
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("Failed to read file during event: {:?}", err);
                         }
                     }
-                    Err(err) => {
-                        eprintln!("Failed to read file during event: {:?}", err);
-                    }
+                }
+                Err(e) => {
+                    println!("Watch error: {:?}", e);
                 }
             }
-            Err(e) => {
-                println!("Watch error: {:?}", e);
-            }
-        }},
+        },
         notify::Config::default().with_poll_interval(Duration::from_secs(1)),
     )
     .expect("Failed to create watcher");
