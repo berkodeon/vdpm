@@ -116,25 +116,23 @@ fn get_changes_structured(changes: &Vec<(&Series, &Series)>) -> Vec<LineDiff> {
     diffs
 }
 
-fn resolve_uninstalled_packages(vec: &Vec<LineDiff>) ->  {
-
-}
-
 fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOperation> {
-    let old_df = CsvReader::new(Cursor::new(new_csv))
+    let old_df = CsvReader::new(Cursor::new(old_csv))
         .with_options(CsvReadOptions::default().with_has_header(true))
-        .finish()?;
+        .finish()
+        .unwrap();
 
-    let new_df = CsvReader::new(Cursor::new(old_csv))
+    let new_df = CsvReader::new(Cursor::new(new_csv))
         .with_options(CsvReadOptions::default().with_has_header(true))
-        .finish()?;
-
+        .finish()
+        .unwrap();
     let added = new_df.clone().as_single_chunk().join(
         &old_df,
         [key_column],
         [key_column],
-        JoinArgs::new(JoinType::Anti),None
-    )?;
+        JoinArgs::new(JoinType::Anti),
+        None
+    ).unwrap();
     println!("Added rows:\n{}", added);
 
     let removed = old_df.clone().as_single_chunk().join(
@@ -142,7 +140,7 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
         [key_column],
         [key_column],
         JoinArgs::new(JoinType::Anti),None
-    )?;
+    ).unwrap();
     println!("Removed rows:\n{}", removed);
 
     let common_old = old_df.clone().as_single_chunk().join(
@@ -150,20 +148,21 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
         [key_column],
         [key_column],
         JoinArgs::new(JoinType::Inner),None
-    )?;
+    ).unwrap();
 
     let common_new = new_df.clone().as_single_chunk().join(
         &old_df,
         [key_column],
         [key_column],
         JoinArgs::new(JoinType::Inner),None
-    )?;
+    ).unwrap();
 
     let changed = common_old
         .iter()
         .zip(common_new.iter())
         .filter(|(a, b)| a != b)
         .collect::<Vec<_>>();
+    println!("Changed rows:\n{}", changed);
 
     if !added.is_empty() {
         let operations: Vec<PluginOperation> = added
@@ -176,15 +175,10 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
                 }
             })
             .collect();
-
-
-
-        let line_diffs: Vec<LineDiff> = get_changes_structured(&added);
-        let packages_to_uninstall = resolve_uninstalled_packages(&line_diffs);
     }
 
     if !changed.is_empty() {
-                let operations: Vec<PluginOperation> = changed
+        let operations: Vec<PluginOperation> = changed
             .get_rows()
             .iter()
             .map(|row| {
