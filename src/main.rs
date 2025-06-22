@@ -39,7 +39,7 @@ struct LineDiff {
 #[derive(Debug)]
 struct PluginOperation {
     operation: PluginOperationType,
-    plugin_name: String
+    plugin_name: String,
 }
 
 fn read_config() -> Config {
@@ -91,6 +91,8 @@ fn calculate_sha256_from_str(content: &str) -> String {
 }
 
 fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOperation> {
+    let mut all_operations: Vec<PluginOperation> = vec![];
+
     let old_df = CsvReader::new(Cursor::new(old_csv))
         .with_options(CsvReadOptions::default().with_has_header(true))
         .finish()
@@ -100,72 +102,75 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
         .with_options(CsvReadOptions::default().with_has_header(true))
         .finish()
         .unwrap();
-    
-    let added = new_df.clone().as_single_chunk().join(
-        &old_df,
-        [key_column],
-        [key_column],
-        JoinArgs::new(JoinType::Anti),
-        None
-    ).unwrap();
+
+    let added = new_df
+        .clone()
+        .as_single_chunk()
+        .join(
+            &old_df,
+            [key_column],
+            [key_column],
+            JoinArgs::new(JoinType::Anti),
+            None,
+        )
+        .unwrap();
     println!("Added rows:\n{}", added);
 
-    let removed = old_df.clone().as_single_chunk().join(
-        &new_df,
-        [key_column],
-        [key_column],
-        JoinArgs::new(JoinType::Anti),None
-    ).unwrap();
+    let removed = old_df
+        .clone()
+        .as_single_chunk()
+        .join(
+            &new_df,
+            [key_column],
+            [key_column],
+            JoinArgs::new(JoinType::Anti),
+            None,
+        )
+        .unwrap();
     println!("Removed rows:\n{}", removed);
 
-    let changed = new_df.clone().as_single_chunk().join(
-        &old_df,
-        [key_column],
-        [key_column],
-        JoinArgs::new(JoinType::Inner).with_suffix(Some("_old".into())),
-        None
-    ).unwrap();
+    let changed = new_df
+        .clone()
+        .as_single_chunk()
+        .join(
+            &old_df,
+            [key_column],
+            [key_column],
+            JoinArgs::new(JoinType::Inner).with_suffix(Some("_old".into())),
+            None,
+        )
+        .unwrap();
 
     if !added.is_empty() {
         let name_series = added.column("plugin_name").unwrap();
-        let operations: Vec<PluginOperation> = name_series
+        let install_operations: Vec<PluginOperation> = name_series
             .str()
             .unwrap()
             .into_iter()
-            .map(|name| {
-                PluginOperation {
-                    operation: PluginOperationType::Install,
-                    plugin_name: name.unwrap().to_string(),
-                }
+            .map(|name| PluginOperation {
+                operation: PluginOperationType::Install,
+                plugin_name: name.unwrap().to_string(),
             })
             .collect();
-
-        println!("Operations to be added: {:?}", operations);
+        all_operations.extend(install_operations)
     }
 
     if !removed.is_empty() {
         let name_series = removed.column("plugin_name").unwrap();
-        let operations: Vec<PluginOperation> = name_series
+        let uninstall_operations: Vec<PluginOperation> = name_series
             .str()
             .unwrap()
             .into_iter()
-            .map(|name| {
-                PluginOperation {
-                    operation: PluginOperationType::Uninstall,
-                    plugin_name: name.unwrap().to_string(),
-                }
+            .map(|name| PluginOperation {
+                operation: PluginOperationType::Uninstall,
+                plugin_name: name.unwrap().to_string(),
             })
             .collect();
 
-        println!("Operations to be removed: {:?}", operations);
+        all_operations.extend(uninstall_operations)
     }
 
-    vec![
-        PluginOperation{
-            operation: PluginOperationType::Install,
-            plugin_name: String::from("odeonsmightyplugin")
-        }
-    ]
+    all_operations
 }
 
 fn write_to_file(file_path: &str, content: &Vec<String>) -> io::Result<()> {
@@ -174,6 +179,23 @@ fn write_to_file(file_path: &str, content: &Vec<String>) -> io::Result<()> {
 
     for line in content {
         writeln!(file, "{}", line)?;
+    }
+    Ok(())
+}
+
+fn process_operations(operations: Vec<PluginOperation>)-> Result<(), ()> {
+    // TODO fix the result type, learn Result and error types
+    for operation in operations.iter() {
+        match operation.operation {
+            PluginOperationType::Install => {
+                println!("Installing plugin: {}", operation.plugin_name);
+                // Dummy install logic
+            }
+            PluginOperationType::Uninstall => {
+                println!("Uninstalling plugin: {}", operation.plugin_name);
+                // Dummy uninstall logic
+            }
+        }
     }
     Ok(())
 }
@@ -208,7 +230,9 @@ fn main() {
                         Ok(current_content) => {
                             let current_hash = calculate_sha256_from_str(&current_content);
                             if current_hash != previous_hash {
-                                diff_lines(&previous_content, &current_content, "plugin_name");
+                                let all_operations: Vec<PluginOperation> =
+                                    diff_lines(&previous_content, &current_content, "plugin_name");
+                                process_operations(all_operations);
 
                                 previous_hash = current_hash;
                             } else {
@@ -240,7 +264,7 @@ fn main() {
         .stderr(Stdio::inherit())
         .spawn()
         .expect("failed to start VisiData");
-
+            
     println!("Visidata started with plugin list!");
     child.wait().expect("VisiData process failed");
     println!("Stopped VisiData");
