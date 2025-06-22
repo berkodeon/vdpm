@@ -92,30 +92,6 @@ fn calculate_sha256_from_str(content: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn get_changes_structured(changes: &Vec<(&Series, &Series)>) -> Vec<LineDiff> {
-    let mut diffs = Vec::new();
-
-    for &(old_series, new_series) in changes {
-        let len = old_series.len();
-        assert_eq!(len, new_series.len(), "Series length mismatch");
-
-        let old_utf8 = old_series.utf8().expect("Expected Utf8 Series");
-        let new_utf8 = new_series.utf8().expect("Expected Utf8 Series");
-
-        for i in 0..len {
-            let old_val = old_utf8.get(i).unwrap_or("").to_string();
-            let new_val = new_utf8.get(i).unwrap_or("").to_string();
-
-            diffs.push(LineDiff {
-                old_entry: old_val,
-                new_entry: new_val,
-            });
-        }
-    }
-
-    diffs
-}
-
 fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOperation> {
     let old_df = CsvReader::new(Cursor::new(old_csv))
         .with_options(CsvReadOptions::default().with_has_header(true))
@@ -143,25 +119,13 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
     ).unwrap();
     println!("Removed rows:\n{}", removed);
 
-    let common_old = old_df.clone().as_single_chunk().join(
-        &new_df,
-        [key_column],
-        [key_column],
-        JoinArgs::new(JoinType::Inner),None
-    ).unwrap();
-
-    let common_new = new_df.clone().as_single_chunk().join(
+    let changed = new_df.clone().as_single_chunk().join(
         &old_df,
         [key_column],
         [key_column],
-        JoinArgs::new(JoinType::Inner),None
+        JoinArgs::new(JoinType::Inner).with_suffix(Some("_old".into())),
+        None
     ).unwrap();
-
-    let changed = common_old
-        .iter()
-        .zip(common_new.iter())
-        .filter(|(a, b)| a != b)
-        .collect::<Vec<_>>();
     println!("Changed rows:\n{}", changed);
 
     if !added.is_empty() {
