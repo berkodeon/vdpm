@@ -24,12 +24,10 @@ struct Settings {
     plugin_folder: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 enum PluginOperationType {
     Install,
     Uninstall,
-    Enable,
-    Disable,
 }
 
 #[derive(Debug)]
@@ -102,6 +100,7 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
         .with_options(CsvReadOptions::default().with_has_header(true))
         .finish()
         .unwrap();
+    
     let added = new_df.clone().as_single_chunk().join(
         &old_df,
         [key_column],
@@ -126,32 +125,39 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
         JoinArgs::new(JoinType::Inner).with_suffix(Some("_old".into())),
         None
     ).unwrap();
-    println!("Changed rows:\n{}", changed);
 
     if !added.is_empty() {
-        let operations: Vec<PluginOperation> = added
-            .get_rows()
-            .iter()
-            .map(|row| {
+        let name_series = added.column("plugin_name").unwrap();
+        let operations: Vec<PluginOperation> = name_series
+            .str()
+            .unwrap()
+            .into_iter()
+            .map(|name| {
                 PluginOperation {
                     operation: PluginOperationType::Install,
-                    plugin_name: row["name"],
+                    plugin_name: name.unwrap().to_string(),
                 }
             })
             .collect();
+
+        println!("Operations to be added: {:?}", operations);
     }
 
-    if !changed.is_empty() {
-        let operations: Vec<PluginOperation> = changed
-            .get_rows()
-            .iter()
-            .map(|row| {
+    if !removed.is_empty() {
+        let name_series = removed.column("plugin_name").unwrap();
+        let operations: Vec<PluginOperation> = name_series
+            .str()
+            .unwrap()
+            .into_iter()
+            .map(|name| {
                 PluginOperation {
-                    operation: PluginOperationType::Install,
-                    plugin_name: row["name"],
+                    operation: PluginOperationType::Uninstall,
+                    plugin_name: name.unwrap().to_string(),
                 }
             })
             .collect();
+
+        println!("Operations to be removed: {:?}", operations);
     }
 
     vec![
@@ -202,7 +208,7 @@ fn main() {
                         Ok(current_content) => {
                             let current_hash = calculate_sha256_from_str(&current_content);
                             if current_hash != previous_hash {
-                                diff_lines(&previous_content, &current_content, "name");
+                                diff_lines(&previous_content, &current_content, "plugin_name");
 
                                 previous_hash = current_hash;
                             } else {
