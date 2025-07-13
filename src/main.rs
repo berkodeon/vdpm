@@ -4,13 +4,18 @@ use polars::prelude::*;
 // use polars::prelude::SeriesUtf8;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::Cursor;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use toml;
+use std::os::unix::fs::OpenOptionsExt; // for custom_flags on Unix
+use libc; // brings libc::* constants into scope
+use env_logger::{Builder, Target};
+use log::LevelFilter;
+use vdpm::cli_args::{ read_cli_args };
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -22,6 +27,7 @@ struct Settings {
     plugin_dir: String,
     plugin_file: String,
     plugin_folder: String,
+    debug_tty_prefix: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,7 +120,7 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
             None,
         )
         .unwrap();
-    println!("Added rows:\n{}", added);
+    log::debug!("Added rows:\n{}", added);
 
     let removed = old_df
         .clone()
@@ -127,7 +133,7 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
             None,
         )
         .unwrap();
-    println!("Removed rows:\n{}", removed);
+    log::debug!("Removed rows:\n{}", removed);
 
     let changed = new_df
         .clone()
@@ -188,11 +194,11 @@ fn process_operations(operations: Vec<PluginOperation>)-> Result<(), ()> {
     for operation in operations.iter() {
         match operation.operation {
             PluginOperationType::Install => {
-                println!("Installing plugin: {}", operation.plugin_name);
+                log::debug!("Installing plugin: {}", operation.plugin_name);
                 // Dummy install logic
             }
             PluginOperationType::Uninstall => {
-                println!("Uninstalling plugin: {}", operation.plugin_name);
+                log::debug!("Uninstalling plugin: {}", operation.plugin_name);
                 // Dummy uninstall logic
             }
         }
@@ -200,9 +206,46 @@ fn process_operations(operations: Vec<PluginOperation>)-> Result<(), ()> {
     Ok(())
 }
 
+fn init_logger(tty_path: &str) -> io::Result<()> {
+    let target = match tty_path.is_empty() {
+        true => Target::Stdout,
+        false => {
+            let tty = OpenOptions::new()
+                .write(true)
+                .custom_flags(libc::O_NOCTTY)
+                .open(tty_path)?;
+            Target::Pipe(Box::new(tty))
+        }
+    };
+
+    Builder::from_default_env()
+      .filter_level(LevelFilter::Debug) // this can be overriden by RUST_LOG env var
+      .target(target)
+      .format_timestamp_secs()
+      .try_init()
+      .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+}
+
 fn main() {
     let config = read_config();
+    let cli_args = read_cli_args();
 
+    if let Some(debug_tty) = cli_args.debug_tty {
+        let tty_path = format!(
+            "{}{}",
+            config.settings.debug_tty_prefix,
+            debug_tty,
+        );
+
+        init_logger(&tty_path).unwrap_or_else(|e| {
+            panic!("Failed to initialize logger to tty: {} {}", e, tty_path);
+        });
+    } else {
+        init_logger("").unwrap_or_else(|e| {
+            panic!("Failed to initialize logger to stdout: {}", e);
+        });
+    }
+x
     let plugin_dir = create_plugin_directory(&config.settings.plugin_dir);
 
     let plugin_path = get_home_dir().join(&config.settings.plugin_folder);
@@ -212,7 +255,7 @@ fn main() {
     let plugins_file_path = plugins_file.to_str().unwrap().to_string();
 
     if let Err(e) = write_to_file(&plugins_file_path, &python_files) {
-        eprintln!("Error writing to file: {}", e);
+        log::error!("Error writing to file: {}", e);
         return;
     }
 
@@ -224,7 +267,7 @@ fn main() {
             let plugins_file_path = plugins_file_path.clone();
             move |res: Result<Event, notify::Error>| match res {
                 Ok(event) => {
-                    println!("File event {:#?}", event.kind);
+                    log::debug!("File event {:#?}", event);
 
                     match fs::read_to_string(&plugins_file_path) {
                         Ok(current_content) => {
@@ -232,20 +275,20 @@ fn main() {
                             if current_hash != previous_hash {
                                 let all_operations: Vec<PluginOperation> =
                                     diff_lines(&previous_content, &current_content, "plugin_name");
-                                process_operations(all_operations);
+                                let _ = process_operations(all_operations);
 
                                 previous_hash = current_hash;
                             } else {
-                                println!("No actual content change (same hash).");
+                                log::debug!("No actual content change (same hash).");
                             }
                         }
                         Err(err) => {
-                            eprintln!("Failed to read file during event: {:?}", err);
+                            log::error!("Failed to read file during event: {:?}", err);
                         }
                     }
                 }
                 Err(e) => {
-                    println!("Watch error: {:?}", e);
+                    log::error!("Watch error: {:?}", e);
                 }
             }
         },
@@ -264,8 +307,8 @@ fn main() {
         .stderr(Stdio::inherit())
         .spawn()
         .expect("failed to start VisiData");
-            
-    println!("Visidata started with plugin list!");
+
+    log::debug!("Visidata started with plugin list!");
     child.wait().expect("VisiData process failed");
-    println!("Stopped VisiData");
+    log::debug!("Stopped VisiData");
 }
