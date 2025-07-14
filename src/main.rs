@@ -245,7 +245,7 @@ fn main() {
             panic!("Failed to initialize logger to stdout: {}", e);
         });
     }
-x
+
     let plugin_dir = create_plugin_directory(&config.settings.plugin_dir);
 
     let plugin_path = get_home_dir().join(&config.settings.plugin_folder);
