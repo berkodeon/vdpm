@@ -3,4 +3,4 @@ plugin_dir = ".config/vdpm"
 plugin_file = "plugins.csv"
 plugin_folder = ".visidata/plugins"
 
-debug_tty_prefix = "/dev/ttys"
+logs_dir = "vdpm_logs"

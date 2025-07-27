@@ -9,13 +9,14 @@ use std::io::Cursor;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration};
 use toml;
 use std::os::unix::fs::OpenOptionsExt; // for custom_flags on Unix
 use libc; // brings libc::* constants into scope
 use env_logger::{Builder, Target};
 use log::LevelFilter;
 use vdpm::cli_args::{ read_cli_args };
+use chrono::Local;
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -27,7 +28,7 @@ struct Settings {
     plugin_dir: String,
     plugin_file: String,
     plugin_folder: String,
-    debug_tty_prefix: String,
+    logs_dir: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -206,17 +207,24 @@ fn process_operations(operations: Vec<PluginOperation>)-> Result<(), ()> {
     Ok(())
 }
 
-fn init_logger(tty_path: &str) -> io::Result<()> {
-    let target = match tty_path.is_empty() {
-        true => Target::Stdout,
-        false => {
-            let tty = OpenOptions::new()
-                .write(true)
-                .custom_flags(libc::O_NOCTTY)
-                .open(tty_path)?;
-            Target::Pipe(Box::new(tty))
-        }
-    };
+fn init_logger(log_folder: &str) -> io::Result<()> {
+  let log_dir = get_home_dir().join(log_folder);
+  if !log_dir.exists() {
+    fs::create_dir_all(&log_dir).expect("Failed to create logs directory");
+  }
+  
+    let timestamp = Local::now().format("%d-%m-%Y-%H:%M").to_string();
+    let log_file_path = log_dir.join(format!("vdpm_{}.log", timestamp));
+    if !log_file_path.exists() {
+        File::create(&log_file_path).expect("Failed to create log file");
+    }
+
+    let tty = OpenOptions::new()
+    .write(true)
+    .custom_flags(libc::O_NOCTTY)
+    .open(log_file_path)?;
+
+    let target = Target::Pipe(Box::new(tty));
 
     Builder::from_default_env()
       .filter_level(LevelFilter::Debug) // this can be overriden by RUST_LOG env var
@@ -228,23 +236,11 @@ fn init_logger(tty_path: &str) -> io::Result<()> {
 
 fn main() {
     let config = read_config();
-    let cli_args = read_cli_args();
+    // let cli_args = read_cli_args();
 
-    if let Some(debug_tty) = cli_args.debug_tty {
-        let tty_path = format!(
-            "{}{}",
-            config.settings.debug_tty_prefix,
-            debug_tty,
-        );
-
-        init_logger(&tty_path).unwrap_or_else(|e| {
-            panic!("Failed to initialize logger to tty: {} {}", e, tty_path);
-        });
-    } else {
-        init_logger("").unwrap_or_else(|e| {
-            panic!("Failed to initialize logger to stdout: {}", e);
-        });
-    }
+    init_logger(&config.settings.logs_dir).unwrap_or_else(|e| {
+        panic!("Failed to initialize logger: {}", e);
+    });
 
     let plugin_dir = create_plugin_directory(&config.settings.plugin_dir);
 
