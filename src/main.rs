@@ -17,8 +17,7 @@ use env_logger::{Builder, Target};
 use log::LevelFilter;
 use vdpm::cli_args::{ read_cli_args };
 use chrono::Local;
-use reqwest::header::{HeaderMap, USER_AGENT};
-use serde::Deserialize;
+use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -192,13 +191,23 @@ fn write_to_file(file_path: &str, content: &Vec<String>) -> io::Result<()> {
     Ok(())
 }
 
-fn process_operations(operations: Vec<PluginOperation>)-> Result<(), ()> {
+async fn process_operations(operations: Vec<PluginOperation>, plugin_path: &PathBuf)-> Result<(), Box<dyn std::error::Error>> {
     // TODO fix the result type, learn Result and error types
     for operation in operations.iter() {
         match operation.operation {
             PluginOperationType::Install => {
-                log::debug!("Installing plugin: {}", operation.plugin_name);
-                // Dummy install logic
+              let repo_url = "https://raw.githubusercontent.com/saulpw/visidata/v2.10.1/visidata/loaders";
+              download_plugin(&repo_url, &operation.plugin_name, &plugin_path).await?;
+
+              // let repo_url = format!("https://raw.githubusercontent.com/saulpw/visidata/v2.10.1/visidata/loaders/{}", operation.plugin_name);
+              // download_plugin(&repo_url, &operation.plugin_name, &plugin_path).await?;
+
+              // create if .py plugin file does not exist under "config.plugin_folder"
+              // download contents of plugin file into .py
+              // add import statement to .visidatarc
+
+              log::debug!("Installing plugin: {}", operation.plugin_name);
+              // Dummy install logic
             }
             PluginOperationType::Uninstall => {
                 log::debug!("Uninstalling plugin: {}", operation.plugin_name);
@@ -236,6 +245,26 @@ fn init_logger(log_folder: &str) -> io::Result<()> {
       .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 }
 
+async fn download_plugin(url: &str, plugin_name: &str, plugin_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+  // let url = "https://api.github.com/repos/saulpw/visidata/contents/visidata/loaders?ref=v3.2";
+  let plugin_download_url = format!("{}/{}.py", url, plugin_name);
+  let plugin_file_path = plugin_path.join(format!("{}.py", plugin_name));
+
+  let mut headers = HeaderMap::new();
+  headers.insert(USER_AGENT, HeaderValue::from_static("rust-client"));
+
+  let client = reqwest::Client::new();
+  let res = client.get(plugin_download_url).headers(headers).send().await?;
+
+  if res.status() == reqwest::StatusCode::OK {
+    let file_content = res.text().await?;
+    log::debug!("{}", file_content);
+  } else {
+    log::error!("didn't get OK status: {}", res.status());
+  }
+
+  Ok(())
+}
 
 #[tokio::main]
 async fn main()  -> Result<(), Box<dyn std::error::Error>> {
@@ -243,18 +272,6 @@ async fn main()  -> Result<(), Box<dyn std::error::Error>> {
     init_logger(&config.settings.logs_dir).unwrap_or_else(|e| {
         panic!("Failed to initialize logger: {}", e);
     });
-
-    let url = "https://api.github.com/repos/saulpw/visidata/contents/visidata/loaders?ref=v3.2";
-
-    let mut headers = HeaderMap::new();
-    headers.insert(USER_AGENT, "rust-client".parse());
-
-    let client = reqwest::Client::new();
-    let res = client.get(url).headers(headers).send().await;
-
-    let files= res.json().await;
-    log::info!("{}", files);
-    return Ok(());
     // let cli_args = read_cli_args();
 
     let plugin_dir = create_plugin_directory(&config.settings.plugin_dir);
@@ -267,7 +284,7 @@ async fn main()  -> Result<(), Box<dyn std::error::Error>> {
 
     if let Err(e) = write_to_file(&plugins_file_path, &python_files) {
         log::error!("Error writing to file: {}", e);
-        return Err(e);
+        return Err(e.into());
     }
 
     let previous_content = fs::read_to_string(&plugins_file_path).unwrap_or_default();
@@ -286,7 +303,16 @@ async fn main()  -> Result<(), Box<dyn std::error::Error>> {
                             if current_hash != previous_hash {
                                 let all_operations: Vec<PluginOperation> =
                                     diff_lines(&previous_content, &current_content, "plugin_name");
-                                let _ = process_operations(all_operations);
+                                let plugin_path_clone = plugin_path.clone();
+
+                                log::debug!("Spawning tokio task for plugin operations");
+                                // TODO: spawned task is not executing, investigate
+                                tokio::spawn(async move {
+                                  log::debug!("Spawned tokio task for plugin operations");
+                                  if let Err(e) = process_operations(all_operations, &plugin_path_clone).await {
+                                    log::error!("Failed to process operations: {:?}", e);
+                                  }
+                                });
 
                                 previous_hash = current_hash;
                             } else {
