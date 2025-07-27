@@ -17,6 +17,8 @@ use env_logger::{Builder, Target};
 use log::LevelFilter;
 use vdpm::cli_args::{ read_cli_args };
 use chrono::Local;
+use reqwest::header::{HeaderMap, USER_AGENT};
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -212,7 +214,7 @@ fn init_logger(log_folder: &str) -> io::Result<()> {
   if !log_dir.exists() {
     fs::create_dir_all(&log_dir).expect("Failed to create logs directory");
   }
-  
+
     let timestamp = Local::now().format("%d-%m-%Y-%H:%M").to_string();
     let log_file_path = log_dir.join(format!("vdpm_{}.log", timestamp));
     if !log_file_path.exists() {
@@ -234,13 +236,26 @@ fn init_logger(log_folder: &str) -> io::Result<()> {
       .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 }
 
-fn main() {
-    let config = read_config();
-    // let cli_args = read_cli_args();
 
+#[tokio::main]
+async fn main()  -> Result<(), Box<dyn std::error::Error>> {
+    let config = read_config();
     init_logger(&config.settings.logs_dir).unwrap_or_else(|e| {
         panic!("Failed to initialize logger: {}", e);
     });
+
+    let url = "https://api.github.com/repos/saulpw/visidata/contents/visidata/loaders?ref=v3.2";
+
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, "rust-client".parse());
+
+    let client = reqwest::Client::new();
+    let res = client.get(url).headers(headers).send().await;
+
+    let files= res.json().await;
+    log::info!("{}", files);
+    return Ok(());
+    // let cli_args = read_cli_args();
 
     let plugin_dir = create_plugin_directory(&config.settings.plugin_dir);
 
@@ -252,7 +267,7 @@ fn main() {
 
     if let Err(e) = write_to_file(&plugins_file_path, &python_files) {
         log::error!("Error writing to file: {}", e);
-        return;
+        return Err(e);
     }
 
     let previous_content = fs::read_to_string(&plugins_file_path).unwrap_or_default();
@@ -307,4 +322,5 @@ fn main() {
     log::debug!("Visidata started with plugin list!");
     child.wait().expect("VisiData process failed");
     log::debug!("Stopped VisiData");
+    return Ok(());
 }
