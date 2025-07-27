@@ -11,3 +11,7 @@ serde_derive = "1.0"
 notify = "8.0.0"
 sha2 = "0.10.9"
 polars = { version = "0.48.1", features = ["csv", "semi_anti_join", "dtype-u8"] }
+env_logger = "0.11.8"
+libc = "0.2"
+log = "0.4"
+clap = { version = "4.5", features = ["derive"] }
