@@ -1,22 +1,27 @@
 use directories::BaseDirs;
-use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::event::{DataChange, ModifyKind::Data};
+use notify::{
+    Event, EventKind::Modify, FsEventWatcher, RecommendedWatcher, RecursiveMode, Watcher,
+};
 use polars::prelude::*;
 // use polars::prelude::SeriesUtf8;
+use chrono::Local;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, read_to_string};
 use std::io::Cursor;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration};
+use std::time::Duration;
+use tokio::sync::{Mutex, mpsc};
 use toml;
-use std::os::unix::fs::OpenOptionsExt; // for custom_flags on Unix
-use libc; // brings libc::* constants into scope
-use env_logger::{Builder, Target};
-use log::LevelFilter;
-use vdpm::cli_args::{ read_cli_args };
-use chrono::Local;
+use tracing::level_filters::LevelFilter;
+use tracing::{debug, error};
+use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
+use tracing_appender::rolling;
+use tracing_subscriber::{EnvFilter, fmt};
+use vdpm::cli_args::read_cli_args;
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -47,6 +52,13 @@ struct LineDiff {
 struct PluginOperation {
     operation: PluginOperationType,
     plugin_name: String,
+}
+
+#[derive(Debug)]
+struct FileState {
+    path: String,
+    content: String,
+    hash: String,
 }
 
 fn read_config() -> Config {
@@ -121,7 +133,7 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
             None,
         )
         .unwrap();
-    log::debug!("Added rows:\n{}", added);
+    debug!("Added rows:\n{}", added);
 
     let removed = old_df
         .clone()
@@ -134,7 +146,7 @@ fn diff_lines(old_csv: &str, new_csv: &str, key_column: &str) -> Vec<PluginOpera
             None,
         )
         .unwrap();
-    log::debug!("Removed rows:\n{}", removed);
+    debug!("Removed rows:\n{}", removed);
 
     let changed = new_df
         .clone()
@@ -190,16 +202,16 @@ fn write_to_file(file_path: &str, content: &Vec<String>) -> io::Result<()> {
     Ok(())
 }
 
-fn process_operations(operations: Vec<PluginOperation>)-> Result<(), ()> {
+fn process_operations(operations: Vec<PluginOperation>) -> Result<(), ()> {
     // TODO fix the result type, learn Result and error types
     for operation in operations.iter() {
         match operation.operation {
             PluginOperationType::Install => {
-                log::debug!("Installing plugin: {}", operation.plugin_name);
+                debug!("Installing plugin: {}", operation.plugin_name);
                 // Dummy install logic
             }
             PluginOperationType::Uninstall => {
-                log::debug!("Uninstalling plugin: {}", operation.plugin_name);
+                debug!("Uninstalling plugin: {}", operation.plugin_name);
                 // Dummy uninstall logic
             }
         }
@@ -207,40 +219,78 @@ fn process_operations(operations: Vec<PluginOperation>)-> Result<(), ()> {
     Ok(())
 }
 
-fn init_logger(log_folder: &str) -> io::Result<()> {
-  let log_dir = get_home_dir().join(log_folder);
-  if !log_dir.exists() {
-    fs::create_dir_all(&log_dir).expect("Failed to create logs directory");
-  }
-  
-    let timestamp = Local::now().format("%d-%m-%Y-%H:%M").to_string();
-    let log_file_path = log_dir.join(format!("vdpm_{}.log", timestamp));
-    if !log_file_path.exists() {
-        File::create(&log_file_path).expect("Failed to create log file");
+fn init_logger(log_folder: &str) -> WorkerGuard {
+    let log_dir = get_home_dir().join(log_folder);
+    if !log_dir.exists() {
+        fs::create_dir_all(&log_dir).expect("Failed to create logs directory");
     }
 
-    let tty = OpenOptions::new()
-    .write(true)
-    .custom_flags(libc::O_NOCTTY)
-    .open(log_file_path)?;
+    let timestamp = Local::now().format("%d-%m-%Y-%H:%M").to_string();
+    let log_file_name = format!("vdpm_{}.log", timestamp);
 
-    let target = Target::Pipe(Box::new(tty));
+    // init log file as async-safe
+    let file_appender = rolling::never(&log_dir, &log_file_name);
+    let (non_blocking, guard) = NonBlocking::new(file_appender);
 
-    Builder::from_default_env()
-      .filter_level(LevelFilter::Debug) // this can be overriden by RUST_LOG env var
-      .target(target)
-      .format_timestamp_secs()
-      .try_init()
-      .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    let filter = EnvFilter::from_default_env().add_directive(LevelFilter::DEBUG.into()); // if not RUST_LOG set, fallback to DEBUG
+
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(non_blocking)
+        .with_timer(fmt::time::LocalTime::rfc_3339())
+        .with_ansi(false)
+        .try_init()
+        .ok(); // ignore error if already initialized
+
+    // return guard to keep non-blocking writer alive
+    guard
 }
 
-fn main() {
+fn watch_for_file_content_changes(
+    plugins_file_path: &String,
+    tx: mpsc::Sender<bool>,
+) -> FsEventWatcher {
+    let mut watcher = RecommendedWatcher::new(
+        {
+            move |res: Result<Event, notify::Error>| match res {
+                Ok(event) => {
+                    debug!("File event {:#?}", event);
+
+                    if let Modify(Data(data_change_type)) = event.kind {
+                        if DataChange::Content == data_change_type {
+                            debug!("CONTENT CHANGED!!!");
+
+                            if tx.blocking_send(true).is_err() {
+                                error!("Failed to send content event to tx, {:?}", event);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Watch error: {:?}", e);
+                }
+            }
+        },
+        notify::Config::default()
+            .with_poll_interval(Duration::from_secs(1))
+            .with_compare_contents(true),
+    )
+    .expect("Failed to create watcher");
+
+    watcher
+        .watch(Path::new(&plugins_file_path), RecursiveMode::NonRecursive)
+        .expect("WATCH FAILED");
+
+    watcher
+}
+
+#[tokio::main]
+async fn main() {
     let config = read_config();
     // let cli_args = read_cli_args();
 
-    init_logger(&config.settings.logs_dir).unwrap_or_else(|e| {
-        panic!("Failed to initialize logger: {}", e);
-    });
+    // let _ = LOG_GUARD.get_or_init(|| init_logger(&config.settings.logs_dir));
+    let _log_file_guard = init_logger(&config.settings.logs_dir);
 
     let plugin_dir = create_plugin_directory(&config.settings.plugin_dir);
 
@@ -251,50 +301,45 @@ fn main() {
     let plugins_file_path = plugins_file.to_str().unwrap().to_string();
 
     if let Err(e) = write_to_file(&plugins_file_path, &python_files) {
-        log::error!("Error writing to file: {}", e);
+        error!("Error writing to file: {}", e);
         return;
     }
 
     let previous_content = fs::read_to_string(&plugins_file_path).unwrap_or_default();
-    let mut previous_hash = calculate_sha256_from_str(&previous_content);
+    let file_state = Arc::new(Mutex::new(FileState {
+        path: plugins_file_path.clone(),
+        hash: calculate_sha256_from_str(&previous_content),
+        content: previous_content,
+    }));
 
-    let mut watcher = RecommendedWatcher::new(
-        {
-            let plugins_file_path = plugins_file_path.clone();
-            move |res: Result<Event, notify::Error>| match res {
-                Ok(event) => {
-                    log::debug!("File event {:#?}", event);
+    let (tx, mut rx) = mpsc::channel::<bool>(16);
 
-                    match fs::read_to_string(&plugins_file_path) {
-                        Ok(current_content) => {
-                            let current_hash = calculate_sha256_from_str(&current_content);
-                            if current_hash != previous_hash {
-                                let all_operations: Vec<PluginOperation> =
-                                    diff_lines(&previous_content, &current_content, "plugin_name");
-                                let _ = process_operations(all_operations);
+    let _watcher = watch_for_file_content_changes(&plugins_file_path, tx.clone());
 
-                                previous_hash = current_hash;
-                            } else {
-                                log::debug!("No actual content change (same hash).");
-                            }
-                        }
-                        Err(err) => {
-                            log::error!("Failed to read file during event: {:?}", err);
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::error!("Watch error: {:?}", e);
+    let file_state_clone = file_state.clone();
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            debug!("Got a content change message: {}", &msg);
+
+            if msg == true {
+                let mut file_state = file_state_clone.lock().await;
+
+                let new_content = read_to_string(&file_state.path).unwrap();
+                let new_hash = calculate_sha256_from_str(&new_content);
+
+                debug!("old hash: {}, new hash: {}", &file_state.hash, &new_hash);
+
+                if new_hash != file_state.hash {
+                    let all_operations: Vec<PluginOperation> =
+                        diff_lines(&file_state.content, &new_content, "plugin_name");
+                    let _ = process_operations(all_operations);
+
+                    file_state.hash = new_hash;
+                    file_state.content = new_content;
                 }
             }
-        },
-        notify::Config::default().with_poll_interval(Duration::from_secs(1)),
-    )
-    .expect("Failed to create watcher");
-
-    watcher
-        .watch(Path::new(&plugins_file_path), RecursiveMode::NonRecursive)
-        .expect("WATCH FAILED");
+        }
+    });
 
     let mut child = Command::new("vd")
         .arg(&plugins_file_path)
@@ -304,7 +349,17 @@ fn main() {
         .spawn()
         .expect("failed to start VisiData");
 
-    log::debug!("Visidata started with plugin list!");
+    debug!("Visidata started with plugin list!");
     child.wait().expect("VisiData process failed");
-    log::debug!("Stopped VisiData");
+    debug!("Stopped VisiData");
 }
+
+// fn run_vd(plugins_file_path: &str) {
+//     let child = Command::new("vd")
+//         .arg(&plugins_file_path)
+//         .stdin(Stdio::inherit())
+//         .stdout(Stdio::inherit())
+//         .stderr(Stdio::inherit())
+//         .spawn()
+//         .expect("failed to start VisiData");
+// }

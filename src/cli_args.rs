@@ -8,5 +8,5 @@ pub struct Opts {
 }
 
 pub fn read_cli_args() -> Opts {
-  Opts::parse()
+    Opts::parse()
 }
