@@ -4,6 +4,7 @@ use notify::{
     Event, EventKind::Modify, FsEventWatcher, RecommendedWatcher, RecursiveMode, Watcher,
 };
 use polars::prelude::*;
+use tokio::io::AsyncWriteExt;
 // use polars::prelude::SeriesUtf8;
 use chrono::Local;
 use serde::Deserialize;
@@ -20,8 +21,10 @@ use tracing::level_filters::LevelFilter;
 use tracing::{debug, error};
 use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
 use tracing_appender::rolling;
+use tracing_subscriber::field::debug;
 use tracing_subscriber::{EnvFilter, fmt};
-use vdpm::cli_args::read_cli_args;
+// use vdpm::cli_args::read_cli_args;
+use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -33,6 +36,7 @@ struct Settings {
     plugin_dir: String,
     plugin_file: String,
     plugin_folder: String,
+    rc_file: String,
     logs_dir: String,
 }
 
@@ -202,11 +206,74 @@ fn write_to_file(file_path: &str, content: &Vec<String>) -> io::Result<()> {
     Ok(())
 }
 
-fn process_operations(operations: Vec<PluginOperation>) -> Result<(), ()> {
+async fn download_plugin(
+    url: &str,
+    plugin_name: &str,
+    plugin_path: &PathBuf,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // let url = "https://api.github.com/repos/saulpw/visidata/contents/visidata/loaders?ref=v3.2";
+    let plugin_download_url = format!("{}/{}.py", url, plugin_name);
+    let plugin_file_path = plugin_path.join(format!("{}.py", plugin_name));
+
+    debug!("plugin download url: {}", &plugin_download_url);
+
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static("rust-client"));
+
+    let client = reqwest::Client::new();
+    let res = client
+        .get(plugin_download_url)
+        .headers(headers)
+        .send()
+        .await?;
+
+    if res.status() == reqwest::StatusCode::OK {
+        let file_content = res.text().await?;
+        debug!("Writing file content...");
+
+        if let Some(parent_path) = plugin_file_path.parent() {
+            tokio::fs::create_dir_all(parent_path).await?;
+        }
+
+        let file = tokio::fs::File::create(&plugin_file_path).await;
+
+        debug!("File: {:?}", &file);
+
+        if file.is_ok() {
+            let res = file.unwrap().write_all(file_content.as_bytes()).await;
+
+            debug!("{:?}", res);
+        }
+
+        debug!("file content written to: {:?}", &plugin_file_path);
+    } else {
+        error!("didn't get OK status: {}", res.status());
+    }
+
+    Ok(())
+}
+
+async fn process_operations(
+    operations: Vec<PluginOperation>,
+    plugin_path: &PathBuf,
+) -> Result<(), Box<dyn std::error::Error>> {
+    debug!("{:#?}", &operations);
+
     // TODO fix the result type, learn Result and error types
     for operation in operations.iter() {
         match operation.operation {
             PluginOperationType::Install => {
+                let repo_url =
+                    "https://raw.githubusercontent.com/saulpw/visidata/v3.1.1/visidata/loaders";
+                download_plugin(&repo_url, &operation.plugin_name, &plugin_path).await?;
+
+                // let repo_url = format!("https://raw.githubusercontent.com/saulpw/visidata/v2.10.1/visidata/loaders/{}", operation.plugin_name);
+                // download_plugin(&repo_url, &operation.plugin_name, &plugin_path).await?;
+
+                // create if .py plugin file does not exist under "config.plugin_folder"
+                // download contents of plugin file into .py
+                // add import statement to .visidatarc
+
                 debug!("Installing plugin: {}", operation.plugin_name);
                 // Dummy install logic
             }
@@ -284,6 +351,17 @@ fn watch_for_file_content_changes(
     watcher
 }
 
+async fn create_visidata_rc(rc_file_path: &Path) {
+    let res = tokio::fs::File::create_new(&rc_file_path).await;
+
+    match res {
+        Err(e) => {
+            panic!("Couldn't create rc file due to error: {:?}", e);
+        }
+        _ => {}
+    };
+}
+
 #[tokio::main]
 async fn main() {
     let config = read_config();
@@ -292,10 +370,15 @@ async fn main() {
     // let _ = LOG_GUARD.get_or_init(|| init_logger(&config.settings.logs_dir));
     let _log_file_guard = init_logger(&config.settings.logs_dir);
 
+    let rc_file_path = get_home_dir().join(&config.settings.rc_file);
+    let _ = create_visidata_rc(&rc_file_path).await;
+
     let plugin_dir = create_plugin_directory(&config.settings.plugin_dir);
 
     let plugin_path = get_home_dir().join(&config.settings.plugin_folder);
     let python_files = list_python_files(&plugin_path);
+
+    // let enabled_plugins =
 
     let plugins_file = plugin_dir.join(&config.settings.plugin_file);
     let plugins_file_path = plugins_file.to_str().unwrap().to_string();
@@ -312,7 +395,7 @@ async fn main() {
         content: previous_content,
     }));
 
-    let (tx, mut rx) = mpsc::channel::<bool>(16);
+    let (tx, mut rx) = mpsc::channel::<bool>(1);
 
     let _watcher = watch_for_file_content_changes(&plugins_file_path, tx.clone());
 
@@ -332,7 +415,7 @@ async fn main() {
                 if new_hash != file_state.hash {
                     let all_operations: Vec<PluginOperation> =
                         diff_lines(&file_state.content, &new_content, "plugin_name");
-                    let _ = process_operations(all_operations);
+                    let _ = process_operations(all_operations, &plugin_path).await;
 
                     file_state.hash = new_hash;
                     file_state.content = new_content;
@@ -351,6 +434,7 @@ async fn main() {
 
     debug!("Visidata started with plugin list!");
     child.wait().expect("VisiData process failed");
+
     debug!("Stopped VisiData");
 }
 

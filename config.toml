@@ -3,4 +3,6 @@ plugin_dir = ".config/vdpm"
 plugin_file = "plugins.csv"
 plugin_folder = ".visidata/plugins"
 
+rc_file = ".visidatarc"
+
 logs_dir = "vdpm_logs"
