@@ -1,6 +1,6 @@
-use crate::error::Result;
+use crate::error::{Result, VDPMError};
 use serde::Deserialize;
-use std::fmt::{self, Display};
+use std::fmt;
 use std::fs::{self};
 use std::path::Path;
 
@@ -38,5 +38,6 @@ pub fn load_or_create() -> Result<AppConfig> {
     // TODO if the config file is not there, we should create a default one
     let config_path = Path::new("config.toml");
     let config_str = fs::read_to_string(config_path).expect("Failed to read config file");
-    Ok(toml::de::from_str(&config_str).expect("Failed to parse config file"))
+    toml::de::from_str(&config_str)
+        .map_err(|_| VDPMError::ConfigError("Cannot find home directory".to_string()))
 }

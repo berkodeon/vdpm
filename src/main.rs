@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
             info!("Starting interactive VPDP!");
         }
         _ => {
-            cli::run(cli, config).await;
+            cli::run(cli, config).await?;
         }
     };
 
