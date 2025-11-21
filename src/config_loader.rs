@@ -1,9 +1,11 @@
+use crate::error::Result;
 use serde::Deserialize;
+use std::fmt::{self, Display};
 use std::fs::{self};
 use std::path::Path;
 
 #[derive(Debug, Deserialize)]
-pub struct Config {
+pub struct AppConfig {
     pub settings: Settings,
 }
 
@@ -16,9 +18,25 @@ pub struct Settings {
     pub logs_dir: String,
 }
 
-pub fn load_or_create() -> Config {
+impl fmt::Display for Settings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "plugin_dir: {}, plugin_file: {}, plugin_folder: {}, rc_file: {}, logs_dir: {}",
+            self.plugin_dir, self.plugin_file, self.plugin_folder, self.rc_file, self.logs_dir,
+        )
+    }
+}
+
+impl fmt::Display for AppConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.settings)
+    }
+}
+
+pub fn load_or_create() -> Result<AppConfig> {
     // TODO if the config file is not there, we should create a default one
     let config_path = Path::new("config.toml");
     let config_str = fs::read_to_string(config_path).expect("Failed to read config file");
-    toml::de::from_str(&config_str).expect("Failed to parse config file")
+    Ok(toml::de::from_str(&config_str).expect("Failed to parse config file"))
 }
