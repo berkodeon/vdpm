@@ -1,8 +1,12 @@
+use std::process::Child;
+
 use clap::Parser;
 use tracing::info;
 mod cli;
 mod config_loader;
 mod error;
+mod fs;
+mod interactive;
 mod logger;
 mod utils;
 
@@ -27,6 +31,10 @@ async fn main() -> Result<()> {
     match cli.command {
         cli::args::Commands::Interactive => {
             info!("Starting interactive VPDP!");
+            let mut interactive_process: Child = interactive::launch(config).await?;
+            interactive_process
+                .wait()
+                .expect("VisiData process failed!");
         }
         _ => {
             cli::run(cli, config).await?;

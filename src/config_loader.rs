@@ -11,8 +11,8 @@ pub struct AppConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct Settings {
-    pub plugin_dir: String,
-    pub plugin_file: String,
+    pub vdpm_config_folder_path: String,
+    pub plugin_manager_file: String,
     pub plugin_folder: String,
     pub rc_file: String,
     pub logs_dir: String,
@@ -23,7 +23,11 @@ impl fmt::Display for Settings {
         write!(
             f,
             "plugin_dir: {}, plugin_file: {}, plugin_folder: {}, rc_file: {}, logs_dir: {}",
-            self.plugin_dir, self.plugin_file, self.plugin_folder, self.rc_file, self.logs_dir,
+            self.vdpm_config_folder_path,
+            self.plugin_manager_file,
+            self.plugin_folder,
+            self.rc_file,
+            self.logs_dir,
         )
     }
 }
@@ -38,6 +42,7 @@ pub fn load_or_create() -> Result<AppConfig> {
     // TODO if the config file is not there, we should create a default one
     let config_path = Path::new("config.toml");
     let config_str = fs::read_to_string(config_path).expect("Failed to read config file");
+
     toml::de::from_str(&config_str)
-        .map_err(|_| VDPMError::ConfigError("Cannot find home directory".to_string()))
+        .map_err(|e| VDPMError::ConfigError("Failed to parse config".into(), e))
 }
