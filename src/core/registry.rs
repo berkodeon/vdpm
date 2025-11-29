@@ -1,41 +1,78 @@
 use crate::config_loader::{self, AppConfig};
 use crate::core::plugin::{self, Plugin};
-use crate::core::registery;
+use crate::core::registry;
 use crate::error::{RegistryError, Result, VDPMError};
 use crate::fs::operations::list_files_by_extension;
 use crate::utils::get_home_dir;
+use csv::WriterBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tokio;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Registery {
+pub struct Registry {
     pub plugins: HashMap<String, Plugin>,
 }
 
-impl Registery {
+impl Registry {
     pub async fn from_file(path: &Path) -> Result<Self> {
-        let registery_json = tokio::fs::read_to_string(path).await.map_err(|e| {
-            VDPMError::RegisteryReadError(
-                "Failed to read registery file".into(),
+        let registry_json = tokio::fs::read_to_string(path).await.map_err(|e| {
+            VDPMError::RegistryOperationError(
+                "Failed to read registry file".into(),
                 RegistryError::from(e),
             )
         })?;
 
-        let registery = serde_json::from_str(&registery_json).map_err(|e| {
-            VDPMError::RegisteryReadError(
-                "Failed to parse registery file to Registery object".into(),
+        let registry = serde_json::from_str(&registry_json).map_err(|e| {
+            VDPMError::RegistryOperationError(
+                "Failed to parse registry file to Registry object".into(),
                 RegistryError::from(e),
             )
         })?;
 
-        Ok(registery)
+        Ok(registry)
     }
 
-    pub async fn generate() -> Result<Registery> {
-        let installed_plugins: HashSet<String> = Registery::get_installed_plugins()?;
-        let enabled_plugins: HashSet<String> = Registery::get_enabled_plugins().await?;
+    pub async fn to_file(&self, path: &Path) -> Result<&Self> {
+        let mut wtr = WriterBuilder::new().has_headers(true).from_writer(vec![]);
+        for plugin in self.plugins.values() {
+            wtr.serialize(plugin).map_err(|e| {
+                VDPMError::RegistryOperationError(
+                    "Failed to serialize plugin to CSV".into(),
+                    RegistryError::from(e),
+                )
+            })?;
+        }
+
+        let data = wtr.into_inner().map_err(|e| {
+            VDPMError::RegistryOperationError(
+                "Failed to finalize CSV writer".into(),
+                RegistryError::from(e),
+            )
+        })?;
+
+        let mut file = File::create(path).await.map_err(|e| {
+            VDPMError::RegistryOperationError(
+                "Failed to create CSV file".into(),
+                RegistryError::from(e),
+            )
+        })?;
+        file.write_all(&data).await.map_err(|e| {
+            VDPMError::RegistryOperationError(
+                "Failed to write CSV file".into(),
+                RegistryError::from(e),
+            )
+        })?;
+
+        Ok(self)
+    }
+
+    pub async fn generate() -> Result<Self> {
+        let installed_plugins: HashSet<String> = Registry::get_installed_plugins()?;
+        let enabled_plugins: HashSet<String> = Registry::get_enabled_plugins().await?;
 
         let plugins: HashMap<String, Plugin> = installed_plugins
             .into_iter()
@@ -52,7 +89,7 @@ impl Registery {
             })
             .collect();
 
-        Ok(Registery { plugins })
+        Ok(Registry { plugins })
     }
 
     fn get_installed_plugins() -> Result<HashSet<String>> {

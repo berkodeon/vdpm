@@ -1,3 +1,4 @@
+use csv::IntoInnerError;
 use serde_json;
 use thiserror::Error;
 #[derive(Error, Debug)]
@@ -8,12 +9,18 @@ pub enum VDPMError {
     #[error("Visidata RC error: {0}: {1}")]
     VisidataRCError(String, std::io::Error),
 
-    #[error("Reading registery failed: {0}: {1}")]
-    RegisteryReadError(String, RegistryError),
+    #[error("Reading registry failed: {0}: {1}")]
+    RegistryOperationError(String, RegistryError),
 }
 
 #[derive(Error, Debug)]
 pub enum RegistryError {
+    #[error("CSV Error: {0}")]
+    Csv(#[from] csv::Error),
+
+    #[error("CSV Error: {0}")]
+    CSVWriter(#[from] csv::IntoInnerError<csv::Writer<Vec<u8>>>),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 

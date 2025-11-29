@@ -14,7 +14,7 @@ fn create_vdpm_config_directory(config_path: &str) -> PathBuf {
     absolute_config_path
 }
 
-pub fn get_plugin_manager_file_path() -> Result<PathBuf> {
+pub fn get_registry_file_path() -> Result<PathBuf> {
     let config: AppConfig = config_loader::load_or_create()?;
 
     let vdpm_config_directory =
