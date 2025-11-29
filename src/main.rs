@@ -1,9 +1,11 @@
+use std::path::Path;
 use std::process::Child;
 
 use clap::Parser;
 use tracing::info;
 mod cli;
 mod config_loader;
+mod core;
 mod error;
 mod fs;
 mod interactive;
@@ -12,6 +14,7 @@ mod utils;
 
 use crate::config_loader::AppConfig;
 use crate::error::Result;
+use crate::fs::operations::create_visidata_rc;
 use cli::args::Cli;
 
 #[tokio::main]
@@ -25,6 +28,8 @@ async fn main() -> Result<()> {
         &config.settings.logs_dir,
         config
     );
+
+    create_visidata_rc(&Path::new(&config.settings.rc_file)).await?;
 
     let cli = Cli::parse();
 

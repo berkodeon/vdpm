@@ -1,6 +1,6 @@
-use crate::config_loader::AppConfig;
 use crate::error::Result;
 use crate::fs::paths::get_plugin_manager_file_path;
+use crate::{config_loader::AppConfig, core::registery::Registery};
 use tracing::info;
 
 use std::process::{Child, Command, Stdio};
