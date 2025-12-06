@@ -1,13 +1,12 @@
 use crate::config_loader::AppConfig;
+use crate::core::plugin::Plugin;
 use crate::core::registry::{self, Registry};
 use crate::error::Result;
 use crate::fs::paths::get_registry_file_path;
 use tabled::Table;
 use tracing::info;
 
-pub async fn execute() -> Result<Table> {
-    info!("Listing all installed plugins!");
-
-    let registry: Registry = Registry::generate().await?;
-    Ok(Table::new(registry.plugins.values()))
+pub async fn execute(name: &str) -> Result<Table> {
+    info!("Install plugin({})!", name);
+    Ok(Table::new(Vec::<Plugin>::new()))
 }

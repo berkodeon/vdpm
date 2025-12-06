@@ -2,6 +2,7 @@ use std::path::Path;
 use std::process::Child;
 
 use clap::Parser;
+use tabled::Table;
 use tracing::info;
 mod cli;
 mod config_loader;
@@ -19,6 +20,7 @@ use cli::args::Cli;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // TODO @memedov we should check if visidata is installed!
     let config: AppConfig = config_loader::load_or_create()?;
 
     let _logger_guard = logger::init(&config.settings.logs_dir);
@@ -42,7 +44,8 @@ async fn main() -> Result<()> {
                 .expect("VisiData process failed!");
         }
         _ => {
-            cli::run(cli, config).await?;
+            let result: Table = cli::run_from_cli(cli).await?;
+            println!("{}", result);
         }
     };
 

@@ -6,15 +6,15 @@ use crate::fs::operations::list_files_by_extension;
 use crate::utils::get_home_dir;
 use csv::WriterBuilder;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use tokio;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct Registry {
-    pub plugins: HashMap<String, Plugin>,
+    pub plugins: BTreeMap<String, Plugin>,
 }
 
 impl Registry {
@@ -74,7 +74,7 @@ impl Registry {
         let installed_plugins: HashSet<String> = Registry::get_installed_plugins()?;
         let enabled_plugins: HashSet<String> = Registry::get_enabled_plugins().await?;
 
-        let plugins: HashMap<String, Plugin> = installed_plugins
+        let plugins: BTreeMap<String, Plugin> = installed_plugins
             .into_iter()
             .map(|plugin| {
                 let is_enabled: bool = enabled_plugins.contains(plugin.as_str());

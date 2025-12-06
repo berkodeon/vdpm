@@ -1,6 +1,6 @@
-use csv::IntoInnerError;
-use serde_json;
 use thiserror::Error;
+
+use crate::interactive::registry_snapshot::RegistrySnapshot;
 #[derive(Error, Debug)]
 pub enum VDPMError {
     #[error("Configuration error: {0}: {1}")]
@@ -8,6 +8,12 @@ pub enum VDPMError {
 
     #[error("Visidata RC error: {0}: {1}")]
     VisidataRCError(String, std::io::Error),
+
+    #[error("Visidata RC error: {0}: {1}")]
+    RegistryFileChangeHandlerError(
+        String,
+        tokio::sync::mpsc::error::SendError<RegistrySnapshot>,
+    ),
 
     #[error("Reading registry failed: {0}: {1}")]
     RegistryOperationError(String, RegistryError),
