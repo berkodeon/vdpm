@@ -2,6 +2,7 @@ use crate::error::Result;
 use crate::fs::paths::get_registry_file_path;
 use crate::utils::hash;
 use crate::{config_loader::AppConfig, core::registry::Registry};
+use notify::RecommendedWatcher;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use tokio::sync::mpsc;
@@ -11,7 +12,7 @@ pub mod registry_snapshot;
 mod watcher;
 use registry_snapshot::RegistrySnapshot;
 
-pub async fn launch(app_config: AppConfig) -> Result<Child> {
+pub async fn launch(app_config: AppConfig) -> Result<(Child, RecommendedWatcher)> {
     info!("Launchin interactive mode!");
     let registry_file_path: PathBuf = get_registry_file_path()?;
     let registry = Registry::generate().await?;
@@ -22,10 +23,15 @@ pub async fn launch(app_config: AppConfig) -> Result<Child> {
 
     registry.to_file(&registry_file_path).await?;
 
-    let (tx, mut rx) = mpsc::channel::<RegistrySnapshot>(10);
-    let _watcher = watcher::watch_file(&registry_file_path, tx.clone());
+    let (tx, mut rx) = mpsc::channel::<RegistrySnapshot>(1);
+    info!("Before starting watching!");
+    let watcher: RecommendedWatcher = watcher::watch_file(&registry_file_path, tx.clone())?;
 
-    event_dispatcher::listen(rx, &registry_file_path, last_processed_registry_snapshot);
+    event_dispatcher::listen(
+        rx,
+        registry_file_path.clone(),
+        last_processed_registry_snapshot,
+    );
 
     let child = Command::new("vd")
         .arg(&registry_file_path)
@@ -34,7 +40,5 @@ pub async fn launch(app_config: AppConfig) -> Result<Child> {
         .stderr(Stdio::inherit())
         .spawn()
         .expect("failed to start VisiData");
-
-    info!("Visidata stopped!");
-    Ok(child)
+    Ok((child, watcher))
 }

@@ -2,29 +2,48 @@ use crate::core::registry::Registry;
 use crate::error::{Result, VDPMError};
 use crate::interactive::registry_snapshot::RegistrySnapshot;
 use crate::utils::hash;
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher};
+use notify::event::ModifyKind;
+use notify::{
+    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher,
+};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::error;
+use tracing::{error, info};
 
-pub async fn watch_file(
+pub fn watch_file(
     file_path: &Path,
-    tx: mpsc::Sender<RegistrySnapshot>,
-) -> NotifyResult<RecommendedWatcher> {
+    tx_snapshots: mpsc::Sender<RegistrySnapshot>,
+) -> Result<RecommendedWatcher> {
     let file_path = file_path.to_path_buf();
-    let file_path_clone = file_path.clone();
+    let (tx_file_events, rx_file_events) = mpsc::channel::<notify::Result<Event>>(100);
 
-    let mut watcher = RecommendedWatcher::new(
-        move |res| handle_file_change(res, file_path_clone.clone(), tx.clone()),
-        Config::default()
-            .with_poll_interval(Duration::from_secs(100))
-            .with_compare_contents(true),
-    )?;
+    let mut watcher = notify::recommended_watcher(move |res| {
+        let _ = tx_file_events.try_send(res);
+    })?;
 
-    watcher.watch(file_path.as_ref(), RecursiveMode::NonRecursive)?;
+    watcher.watch(&file_path, RecursiveMode::NonRecursive)?;
+
+    tokio::spawn(async move {
+        process_events_loop(rx_file_events, file_path, tx_snapshots).await;
+    });
+
     Ok(watcher)
+}
+
+async fn process_events_loop(
+    mut rx_events: mpsc::Receiver<notify::Result<Event>>,
+    file_path: PathBuf,
+    tx_snapshots: mpsc::Sender<RegistrySnapshot>,
+) {
+    while let Some(event_result) = rx_events.recv().await {
+        if let Err(e) =
+            process_file_change(event_result, file_path.clone(), tx_snapshots.clone()).await
+        {
+            handle_error(e);
+        }
+    }
 }
 
 fn handle_file_change(
@@ -44,18 +63,22 @@ async fn process_file_change(
     file_path: PathBuf,
     tx: mpsc::Sender<RegistrySnapshot>,
 ) -> Result<()> {
-    let current_registry = Registry::from_file(&file_path).await?;
-    let current_registry_hash = hash(&current_registry);
-    let current_registry_snapshot = RegistrySnapshot {
-        registry: current_registry,
-        hash: current_registry_hash,
-    };
-    tx.send(current_registry_snapshot).await.map_err(|e| {
-        VDPMError::RegistryFileChangeHandlerError(
-            "Failed send message to registry change queue".into(),
-            e,
-        )
-    })?;
+    let event = event_result?;
+    if let EventKind::Modify(ModifyKind::Data(_)) = event.kind {
+        let current_registry = Registry::from_file(&file_path).await?;
+        info!("Processing file change started!");
+        let current_registry_hash = hash(&current_registry);
+        let current_registry_snapshot = RegistrySnapshot {
+            registry: current_registry,
+            hash: current_registry_hash,
+        };
+        tx.send(current_registry_snapshot).await.map_err(|e| {
+            VDPMError::RegistryFileChangeHandlerError(
+                "Failed send message to registry change queue".into(),
+                e,
+            )
+        })?;
+    }
     Ok(())
 }
 

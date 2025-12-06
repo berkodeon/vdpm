@@ -1,7 +1,7 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tokio::sync::mpsc;
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::{
     cli::{self, args::Commands},
@@ -16,28 +16,32 @@ struct PluginOperation {
     command: Commands,
     plugin: Plugin,
 }
-
 pub fn listen(
-    mut rx: mpsc::Receiver<RegistrySnapshot>,
-    registry_file_path: &Path,
-    mut last_processed_registry_snapshot: RegistrySnapshot,
+    rx: mpsc::Receiver<RegistrySnapshot>,
+    registry_file_path: PathBuf,
+    last_processed_registry_snapshot: RegistrySnapshot,
 ) {
-    tokio::spawn(listen_registry_change(
-        rx,
-        registry_file_path,
-        last_processed_registry_snapshot,
-    ));
+    tokio::spawn(async move {
+        debug!("we started reading the event line!");
+        if let Err(e) =
+            listen_registry_changes(rx, registry_file_path, last_processed_registry_snapshot).await
+        {
+            // @memedov: what do you think about coming up with reverting logic!
+            error!("registry listener failed: {e}");
+        }
+    });
 }
 
-async fn listen_registry_change(
+async fn listen_registry_changes(
     mut rx: mpsc::Receiver<RegistrySnapshot>,
-    registry_file_path: &Path,
+    registry_file_path: PathBuf,
     mut last_processed_registry_snapshot: RegistrySnapshot,
 ) -> Result<()> {
     while let Some(registry_snapshot) = rx.recv().await {
+        error!("trying something new");
         debug!("Got a content change message: {}", &registry_snapshot);
         // TODO @memedov, if registry snapshot created_at < last message processed, we should simply skip the message
-        let new_registry: Registry = Registry::from_file(registry_file_path).await?;
+        let new_registry: Registry = Registry::from_file(&registry_file_path).await?;
         let new_hash: u64 = hash(&new_registry);
         let new_registry_snapshot = RegistrySnapshot {
             registry: new_registry.clone(),
@@ -54,10 +58,7 @@ async fn listen_registry_change(
                 generate_operations(&last_processed_registry_snapshot.registry, &new_registry);
 
             dispatch_operation(all_operations).await?;
-            last_processed_registry_snapshot = RegistrySnapshot {
-                registry: new_registry,
-                hash: new_hash,
-            };
+            last_processed_registry_snapshot = new_registry_snapshot;
         }
     }
     Ok(())

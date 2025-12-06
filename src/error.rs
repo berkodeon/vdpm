@@ -3,6 +3,9 @@ use thiserror::Error;
 use crate::interactive::registry_snapshot::RegistrySnapshot;
 #[derive(Error, Debug)]
 pub enum VDPMError {
+    #[error("File watcher error")]
+    FileWatcherError(#[from] notify::Error),
+
     #[error("Configuration error: {0}: {1}")]
     ConfigError(String, toml::de::Error),
 

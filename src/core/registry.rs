@@ -19,21 +19,31 @@ pub struct Registry {
 
 impl Registry {
     pub async fn from_file(path: &Path) -> Result<Self> {
-        let registry_json = tokio::fs::read_to_string(path).await.map_err(|e| {
+        let content = tokio::fs::read_to_string(path).await.map_err(|e| {
             VDPMError::RegistryOperationError(
                 "Failed to read registry file".into(),
                 RegistryError::from(e),
             )
         })?;
 
-        let registry = serde_json::from_str(&registry_json).map_err(|e| {
-            VDPMError::RegistryOperationError(
-                "Failed to parse registry file to Registry object".into(),
-                RegistryError::from(e),
-            )
-        })?;
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(true)
+            .from_reader(content.as_bytes());
 
-        Ok(registry)
+        let plugins = reader
+            .deserialize::<Plugin>()
+            .collect::<std::result::Result<Vec<Plugin>, _>>()
+            .map_err(|e| {
+                VDPMError::RegistryOperationError(
+                    "Failed to parse CSV registry file".into(),
+                    RegistryError::from(e),
+                )
+            })?
+            .into_iter()
+            .map(|plugin| (plugin.name.clone(), plugin))
+            .collect();
+
+        Ok(Registry { plugins })
     }
 
     pub async fn to_file(&self, path: &Path) -> Result<&Self> {

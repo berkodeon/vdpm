@@ -2,6 +2,7 @@ use std::path::Path;
 use std::process::Child;
 
 use clap::Parser;
+use notify::RecommendedWatcher;
 use tabled::Table;
 use tracing::info;
 mod cli;
@@ -38,7 +39,8 @@ async fn main() -> Result<()> {
     match cli.command {
         cli::args::Commands::Interactive => {
             info!("Starting interactive VPDP!");
-            let mut interactive_process: Child = interactive::launch(config).await?;
+            let (mut interactive_process, _watcher): (Child, RecommendedWatcher) =
+                interactive::launch(config).await?;
             interactive_process
                 .wait()
                 .expect("VisiData process failed!");
