@@ -1,7 +1,5 @@
-use crate::config_loader::AppConfig;
-use crate::core::registry::{self, Registry};
+use crate::core::registry::Registry;
 use crate::error::Result;
-use crate::fs::paths::get_registry_file_path;
 use tabled::Table;
 use tracing::info;
 

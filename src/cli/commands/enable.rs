@@ -8,5 +8,6 @@ use tracing::info;
 
 pub async fn execute(name: &str) -> Result<Table> {
     info!("Enable plugin({})!", name);
+    // TODO add a line for our plugin to .visidatarc
     Ok(Table::new(Vec::<Plugin>::new()))
 }

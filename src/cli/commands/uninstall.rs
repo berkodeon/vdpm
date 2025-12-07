@@ -8,5 +8,7 @@ use tracing::info;
 
 pub async fn execute(name: &str) -> Result<Table> {
     info!("Uninstall plugin({})!", name);
+    // TODO disable the plugin
+    // TODO delete the plugin file from plugin_folder
     Ok(Table::new(Vec::<Plugin>::new()))
 }

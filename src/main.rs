@@ -45,8 +45,8 @@ async fn main() -> Result<()> {
                 .wait()
                 .expect("VisiData process failed!");
         }
-        _ => {
-            let result: Table = cli::run_from_cli(cli).await?;
+        command => {
+            let result: Table = cli::run(&command).await?;
             println!("{}", result);
         }
     };

@@ -16,6 +16,7 @@ struct PluginOperation {
     command: Commands,
     plugin: Plugin,
 }
+
 pub fn listen(
     rx: mpsc::Receiver<RegistrySnapshot>,
     registry_file_path: PathBuf,
@@ -54,10 +55,10 @@ async fn listen_registry_changes(
         );
 
         if new_hash != last_processed_registry_snapshot.hash {
-            let all_operations: Vec<PluginOperation> =
+            let operations: Vec<PluginOperation> =
                 generate_operations(&last_processed_registry_snapshot.registry, &new_registry);
 
-            dispatch_operation(all_operations).await?;
+            dispatch_operation(operations).await?;
             last_processed_registry_snapshot = new_registry_snapshot;
         }
     }

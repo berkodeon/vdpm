@@ -1,16 +1,12 @@
 pub mod args;
 pub mod commands;
-use crate::config_loader::AppConfig;
 use crate::error::Result;
 
-use args::{Cli, Commands};
+use args::Commands;
 use tabled::Table;
 
-pub async fn run_from_cli(cli: Cli) -> Result<Table> {
-    Ok(run(&cli.command).await?)
-}
-
 pub async fn run(command: &Commands) -> Result<Table> {
+    // TODO @memedov shall we add trait to these commands?
     let result: Table = match command {
         Commands::List => commands::list::execute().await?,
         Commands::Enable { name } => commands::enable::execute(&name).await?,

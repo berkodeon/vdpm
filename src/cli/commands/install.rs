@@ -8,5 +8,6 @@ use tracing::info;
 
 pub async fn execute(name: &str) -> Result<Table> {
     info!("Install plugin({})!", name);
+    // TODO copy the install logic from github
     Ok(Table::new(Vec::<Plugin>::new()))
 }

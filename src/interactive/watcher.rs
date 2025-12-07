@@ -3,12 +3,9 @@ use crate::error::{Result, VDPMError};
 use crate::interactive::registry_snapshot::RegistrySnapshot;
 use crate::utils::hash;
 use notify::event::ModifyKind;
-use notify::{
-    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher,
-};
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{error, info};
 
@@ -20,7 +17,7 @@ pub fn watch_file(
     let (tx_file_events, rx_file_events) = mpsc::channel::<notify::Result<Event>>(100);
 
     let mut watcher = notify::recommended_watcher(move |res| {
-        let _ = tx_file_events.try_send(res);
+        let _ = tx_file_events.blocking_send(res);
     })?;
 
     watcher.watch(&file_path, RecursiveMode::NonRecursive)?;
@@ -44,18 +41,6 @@ async fn process_events_loop(
             handle_error(e);
         }
     }
-}
-
-fn handle_file_change(
-    event_result: notify::Result<Event>,
-    file_path: PathBuf,
-    tx: mpsc::Sender<RegistrySnapshot>,
-) {
-    tokio::spawn(async move {
-        if let Err(e) = process_file_change(event_result, file_path, tx).await {
-            handle_error(e);
-        }
-    });
 }
 
 async fn process_file_change(
