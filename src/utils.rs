@@ -17,3 +17,14 @@ pub fn hash<T: Hash>(value: &T) -> u64 {
     value.hash(&mut s);
     s.finish()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash() {
+        println!("{}", hash(&String::from("vdpm")));
+        assert!(2047530091333027188 == hash(&String::from("vdpm")))
+    }
+}

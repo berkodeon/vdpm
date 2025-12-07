@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
 
     match cli.command {
         cli::args::Commands::Interactive => {
-            info!("Starting interactive VPDP!");
+            info!("Starting interactive VDPM!");
             let (mut interactive_process, _watcher): (Child, RecommendedWatcher) =
                 interactive::launch(config).await?;
             interactive_process

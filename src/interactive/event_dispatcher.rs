@@ -19,14 +19,11 @@ struct PluginOperation {
 
 pub fn listen(
     rx: mpsc::Receiver<RegistrySnapshot>,
-    registry_file_path: PathBuf,
     last_processed_registry_snapshot: RegistrySnapshot,
 ) {
     tokio::spawn(async move {
         debug!("we started reading the event line!");
-        if let Err(e) =
-            listen_registry_changes(rx, registry_file_path, last_processed_registry_snapshot).await
-        {
+        if let Err(e) = listen_registry_changes(rx, last_processed_registry_snapshot).await {
             // @memedov: what do you think about coming up with reverting logic!
             error!("registry listener failed: {e}");
         }
@@ -35,28 +32,21 @@ pub fn listen(
 
 async fn listen_registry_changes(
     mut rx: mpsc::Receiver<RegistrySnapshot>,
-    registry_file_path: PathBuf,
     mut last_processed_registry_snapshot: RegistrySnapshot,
 ) -> Result<()> {
-    while let Some(registry_snapshot) = rx.recv().await {
-        error!("trying something new");
-        debug!("Got a content change message: {}", &registry_snapshot);
+    while let Some(new_registry_snapshot) = rx.recv().await {
+        debug!("Got a content change message: {}", &new_registry_snapshot);
         // TODO @memedov, if registry snapshot created_at < last message processed, we should simply skip the message
-        let new_registry: Registry = Registry::from_file(&registry_file_path).await?;
-        let new_hash: u64 = hash(&new_registry);
-        let new_registry_snapshot = RegistrySnapshot {
-            registry: new_registry.clone(),
-            hash: new_hash,
-        };
-
         debug!(
             "old hash: {}, new hash: {}",
-            &last_processed_registry_snapshot.hash, &new_hash
+            &last_processed_registry_snapshot.hash, &new_registry_snapshot.hash
         );
 
-        if new_hash != last_processed_registry_snapshot.hash {
-            let operations: Vec<PluginOperation> =
-                generate_operations(&last_processed_registry_snapshot.registry, &new_registry);
+        if new_registry_snapshot.hash != last_processed_registry_snapshot.hash {
+            let operations: Vec<PluginOperation> = generate_operations(
+                &last_processed_registry_snapshot.registry,
+                &new_registry_snapshot.registry,
+            );
 
             dispatch_operation(operations).await?;
             last_processed_registry_snapshot = new_registry_snapshot;

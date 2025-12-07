@@ -27,11 +27,7 @@ pub async fn launch(app_config: AppConfig) -> Result<(Child, RecommendedWatcher)
     info!("Before starting watching!");
     let watcher: RecommendedWatcher = watcher::watch_file(&registry_file_path, tx.clone())?;
 
-    event_dispatcher::listen(
-        rx,
-        registry_file_path.clone(),
-        last_processed_registry_snapshot,
-    );
+    event_dispatcher::listen(rx, last_processed_registry_snapshot);
 
     let child = Command::new("vd")
         .arg(&registry_file_path)
