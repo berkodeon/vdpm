@@ -1,6 +1,5 @@
 use crate::config_loader::{self, AppConfig};
-use crate::core::plugin::{self, Plugin};
-use crate::core::registry;
+use crate::core::plugin::Plugin;
 use crate::error::{RegistryError, Result, VDPMError};
 use crate::fs::operations::list_files_by_extension;
 use crate::utils::get_home_dir;
@@ -57,7 +56,7 @@ impl Registry {
             })?;
         }
 
-        let data = wtr.into_inner().map_err(|e| {
+        let data: Vec<u8> = wtr.into_inner().map_err(|e| {
             VDPMError::RegistryOperationError(
                 "Failed to finalize CSV writer".into(),
                 RegistryError::from(e),
@@ -76,6 +75,27 @@ impl Registry {
                 RegistryError::from(e),
             )
         })?;
+
+        Ok(self)
+    }
+
+    pub async fn to_visidatarc_file(&self, path: &Path) -> Result<&Self> {
+        let map_err = |e| {
+            VDPMError::RegistryOperationError(
+                "Failed to write to .visidatarc file".into(),
+                RegistryError::from(e),
+            )
+        };
+
+        let content = self
+            .plugins
+            .values()
+            .filter(|p| p.installed && p.enabled)
+            .map(|p| format!("import plugin.{}", p.name))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        tokio::fs::write(path, content).await.map_err(map_err)?;
 
         Ok(self)
     }
