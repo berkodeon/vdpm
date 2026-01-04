@@ -6,7 +6,7 @@ use crate::utils::get_home_dir;
 use csv::WriterBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -79,7 +79,7 @@ impl Registry {
         Ok(self)
     }
 
-    pub async fn to_visidatarc_file(&self, path: &Path) -> Result<&Self> {
+    pub async fn to_visidatarc_file(&self, path: &PathBuf) -> Result<&Self> {
         let map_err = |e| {
             VDPMError::RegistryOperationError(
                 "Failed to write to .visidatarc file".into(),
@@ -94,7 +94,6 @@ impl Registry {
             .map(|p| format!("import plugin.{}", p.name))
             .collect::<Vec<_>>()
             .join("\n");
-
         tokio::fs::write(path, content).await.map_err(map_err)?;
 
         Ok(self)
@@ -143,9 +142,9 @@ impl Registry {
 
         let enabled_plugins: HashSet<String> = visidata_rc_content
             .split("\n")
-            .filter(|line| line.starts_with("import plugins."))
+            .filter(|line| line.starts_with("import plugin."))
             .filter_map(|line| {
-                line.strip_prefix("import plugins.")
+                line.strip_prefix("import plugin.")
                     .map(|enabled_plugin| enabled_plugin.to_string())
             })
             .collect();

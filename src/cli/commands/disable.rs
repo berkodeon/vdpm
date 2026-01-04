@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::config_loader::{self, AppConfig};
 use crate::core::registry::Registry;
 use crate::error::{PluginOperationError, Result, VDPMError};
+use crate::utils::get_home_dir;
 use tabled::Table;
 use tracing::{info, instrument};
 
@@ -17,7 +18,7 @@ pub async fn execute(name: &str) -> Result<Table> {
         "Starting disabling plugin!"
     );
     let config: AppConfig = config_loader::load_or_create()?;
-    let rc_file = &Path::new(&config.settings.rc_file);
+    let rc_file = get_home_dir().join(&config.settings.rc_file);
     let mut registry = Registry::generate().await?;
 
     let mut plugin = registry.plugins.get(name).cloned().ok_or_else(|| {
@@ -29,7 +30,7 @@ pub async fn execute(name: &str) -> Result<Table> {
     plugin.enabled = false;
     registry.plugins.insert(name.to_string(), plugin.clone());
 
-    registry.to_visidatarc_file(rc_file).await?;
+    registry.to_visidatarc_file(&rc_file).await?;
 
     info!(
         plugin = %name,
