@@ -30,6 +30,9 @@ pub enum PluginOperationError {
     #[error("File error: {0}")]
     FileError(#[from] std::io::Error),
 
+    #[error("Plugin not exists error")]
+    NotExistError(String),
+
     #[error("Fetch error: {0}")]
     FetchError(#[from] reqwest::Error),
 }
