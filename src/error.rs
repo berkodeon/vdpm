@@ -12,6 +12,9 @@ pub enum VDPMError {
     #[error("Visidata RC error: {0}: {1}")]
     VisidataRCError(String, std::io::Error),
 
+    #[error("Plugin error: {0}: {1}")]
+    PluginError(String, PluginOperationError),
+
     #[error("Visidata RC error: {0}: {1}")]
     RegistryFileChangeHandlerError(
         String,
@@ -20,6 +23,15 @@ pub enum VDPMError {
 
     #[error("Reading registry failed: {0}: {1}")]
     RegistryOperationError(String, RegistryError),
+}
+
+#[derive(Error, Debug)]
+pub enum PluginOperationError {
+    #[error("File error: {0}")]
+    FileError(#[from] std::io::Error),
+
+    #[error("Fetch error: {0}")]
+    FetchError(#[from] reqwest::Error),
 }
 
 #[derive(Error, Debug)]
