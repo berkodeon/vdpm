@@ -1,14 +1,26 @@
-use crate::config_loader::AppConfig;
-use crate::core::plugin::Plugin;
-use crate::core::registry::{self, Registry};
-use crate::error::Result;
-use crate::fs::paths::get_registry_file_path;
+use crate::cli::commands::disable;
+use crate::config_loader::{self, AppConfig};
+use crate::error::{RegistryError, Result, VDPMError};
+use crate::utils::get_home_dir;
 use tabled::Table;
 use tracing::info;
 
 pub async fn execute(name: &str) -> Result<Table> {
     info!("Uninstall plugin({})!", name);
-    // TODO disable the plugin
-    // TODO delete the plugin file from plugin_folder
-    Ok(Table::new(Vec::<Plugin>::new()))
+    let config: AppConfig = config_loader::load_or_create()?;
+    let plugin_folder = get_home_dir().join(&config.settings.plugin_folder);
+    let plugin_file_path = plugin_folder.join(format!("{}.py", name));
+
+    let disabled_plugin_result: Table = disable::execute(name).await?;
+
+    tokio::fs::remove_file(plugin_file_path)
+        .await
+        .map_err(|e| {
+            VDPMError::RegistryOperationError(
+                format!("Failed to delete the plugin({})", name),
+                RegistryError::from(e),
+            )
+        })?;
+
+    Ok(disabled_plugin_result)
 }
