@@ -17,6 +17,7 @@ mod utils;
 use crate::config_loader::AppConfig;
 use crate::error::Result;
 use crate::fs::operations::create_visidata_rc;
+use crate::utils::get_home_dir;
 use cli::args::Cli;
 
 #[tokio::main]
@@ -32,7 +33,7 @@ async fn main() -> Result<()> {
         config
     );
 
-    create_visidata_rc(&Path::new(&config.settings.rc_file)).await?;
+    create_visidata_rc(&get_home_dir().join(&config.settings.rc_file)).await?;
 
     let cli = Cli::parse();
 
