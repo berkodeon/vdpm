@@ -142,9 +142,9 @@ impl Registry {
 
         let enabled_plugins: HashSet<String> = visidata_rc_content
             .split("\n")
-            .filter(|line| line.starts_with("import plugin."))
+            .filter(|line| line.starts_with("import plugins."))
             .filter_map(|line| {
-                line.strip_prefix("import plugin.")
+                line.strip_prefix("import plugins.")
                     .map(|enabled_plugin| enabled_plugin.to_string())
             })
             .collect();
