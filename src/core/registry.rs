@@ -91,7 +91,7 @@ impl Registry {
             .plugins
             .values()
             .filter(|p| p.installed && p.enabled)
-            .map(|p| format!("import plugin.{}", p.name))
+            .map(|p| format!("import plugins.{}", p.name))
             .collect::<Vec<_>>()
             .join("\n");
         tokio::fs::write(path, content).await.map_err(map_err)?;

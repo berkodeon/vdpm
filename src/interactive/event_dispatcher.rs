@@ -94,21 +94,26 @@ fn generate_operations(old_registry: &Registry, new_registry: &Registry) -> Vec<
     }
 
     for (plugin_name, new_plugin) in &new_registry.plugins {
-        let op = if !old_registry.plugins.contains_key(plugin_name) {
-            Some(PluginOperation {
+        if !old_registry.plugins.contains_key(plugin_name) {
+            operations.push(PluginOperation {
                 command: Commands::Install {
                     name: plugin_name.clone(),
                 },
                 plugin: new_plugin.clone(),
-            })
-        } else {
-            None
-        };
+            });
 
-        if let Some(op) = op {
-            operations.push(op);
+            if new_plugin.enabled {
+                operations.push(PluginOperation {
+                    command: Commands::Enable {
+                        name: plugin_name.clone(),
+                    },
+                    plugin: new_plugin.clone(),
+                });
+            }
         }
     }
+
+    tracing::debug!("#kalkulating berk# {:#?}", &operations);
 
     operations
 }
