@@ -11,12 +11,30 @@ use tokio;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
+// TODO: move into macros or utils
+macro_rules! assert_has_fields {
+    ($ty:ty, $( $field:ident ),+ $(,)?) => {
+        const _: fn(&$ty) = |v| {
+            $(
+                let _ = &v.$field;
+            )+
+        };
+    };
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct Registry {
     pub plugins: BTreeMap<String, Plugin>,
 }
 
 impl Registry {
+    fn get_csv_headers(&self) -> Vec<&'static str> {
+        // dyanmic alternative: https://crates.io/crates/struct-field-names-as-array
+        assert_has_fields!(Plugin, name, enabled, installed);
+
+        vec!["name", "enabled", "installed"]
+    }
+
     pub async fn from_file(path: &Path) -> Result<Self> {
         let content = tokio::fs::read_to_string(path).await.map_err(|e| {
             VDPMError::RegistryOperationError(
@@ -46,22 +64,7 @@ impl Registry {
     }
 
     pub async fn to_file(&self, path: &Path) -> Result<&Self> {
-        let mut wtr = WriterBuilder::new().has_headers(true).from_writer(vec![]);
-        for plugin in self.plugins.values() {
-            wtr.serialize(plugin).map_err(|e| {
-                VDPMError::RegistryOperationError(
-                    "Failed to serialize plugin to CSV".into(),
-                    RegistryError::from(e),
-                )
-            })?;
-        }
-
-        let data: Vec<u8> = wtr.into_inner().map_err(|e| {
-            VDPMError::RegistryOperationError(
-                "Failed to finalize CSV writer".into(),
-                RegistryError::from(e),
-            )
-        })?;
+        let headers = self.get_csv_headers();
 
         let mut file = File::create(path).await.map_err(|e| {
             VDPMError::RegistryOperationError(
@@ -69,6 +72,33 @@ impl Registry {
                 RegistryError::from(e),
             )
         })?;
+
+        let mut writer = WriterBuilder::new().has_headers(false).from_writer(vec![]);
+
+        // write headers
+        writer.write_record(headers).map_err(|e| {
+            VDPMError::RegistryOperationError(
+                "Failed to write CSV headers".into(),
+                RegistryError::from(e),
+            )
+        })?;
+
+        for plugin in self.plugins.values() {
+            writer.serialize(plugin).map_err(|e| {
+                VDPMError::RegistryOperationError(
+                    "Failed to serialize plugin to CSV".into(),
+                    RegistryError::from(e),
+                )
+            })?;
+        }
+
+        let data = writer.into_inner().map_err(|e| {
+            VDPMError::RegistryOperationError(
+                "Failed to finalize CSV writer".into(),
+                RegistryError::from(e),
+            )
+        })?;
+
         file.write_all(&data).await.map_err(|e| {
             VDPMError::RegistryOperationError(
                 "Failed to write CSV file".into(),
@@ -123,7 +153,7 @@ impl Registry {
 
     fn get_installed_plugins() -> Result<HashSet<String>> {
         // TODO @memedov, let's make it async also!
-        let config: AppConfig = config_loader::load_or_create()?;
+        let config = config_loader::load_or_create()?;
         let installed_plugins: HashSet<String> = list_files_by_extension(
             &get_home_dir().join(&config.settings.plugin_folder),
             "py".to_string(),
@@ -132,13 +162,15 @@ impl Registry {
     }
 
     async fn get_enabled_plugins() -> Result<HashSet<String>> {
-        let config: AppConfig = config_loader::load_or_create()?;
+        let config = config_loader::load_or_create()?;
         let visidata_rc_content =
             tokio::fs::read_to_string(&get_home_dir().join(&config.settings.rc_file))
                 .await
                 .map_err(|e| {
                     VDPMError::VisidataRCError("VisidataRC could not be read!".into(), e)
                 })?;
+
+        tracing::debug!("visidata_rc_content {:?}", &visidata_rc_content);
 
         let enabled_plugins: HashSet<String> = visidata_rc_content
             .split("\n")

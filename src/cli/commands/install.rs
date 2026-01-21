@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use crate::config_loader;
-use crate::config_loader::AppConfig;
 use crate::core::plugin::Plugin;
 use crate::error::{PluginOperationError, Result, VDPMError};
 use crate::utils::get_home_dir;
@@ -14,7 +13,7 @@ use tracing::{debug, info, instrument, warn};
 
 #[instrument(level = "info", skip_all, fields(plugin = %name))]
 pub async fn execute(name: &str) -> Result<Table> {
-    let config: AppConfig = config_loader::load_or_create()?;
+    let config = config_loader::load_or_create()?;
     debug!(
         plugin_folder = %config.settings.plugin_folder,
         "Loaded application configuration"
