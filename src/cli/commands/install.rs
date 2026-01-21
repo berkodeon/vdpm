@@ -82,7 +82,8 @@ async fn create_plugin_file(name: &str, path: &PathBuf) -> Result<File> {
 
 #[instrument(level = "info", skip_all, fields(plugin = %name))]
 async fn download_plugin(name: &str) -> Result<String> {
-    let visidata_version = "v3.1.1";
+    let app_config = config_loader::load_or_create()?;
+    let visidata_version = format!("v{}", app_config.settings.vd_version);
     let repo_url = format!(
         "https://raw.githubusercontent.com/saulpw/visidata/{}/visidata/loaders",
         visidata_version
