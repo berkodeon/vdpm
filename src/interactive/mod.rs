@@ -4,16 +4,24 @@ use crate::error::Result;
 use crate::fs::paths::get_registry_file_path;
 use crate::utils::{get_home_dir, hash};
 use notify::RecommendedWatcher;
+use registry_snapshot::RegistrySnapshot;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tracing::info;
+
 mod event_dispatcher;
 pub mod registry_snapshot;
 mod watcher;
-use registry_snapshot::RegistrySnapshot;
 
-pub async fn launch() -> Result<(Child, RecommendedWatcher)> {
+#[derive(Debug)]
+pub struct WatcherState {
+    registry_file_path: PathBuf,
+    previous_snapshot: RegistrySnapshot,
+}
+
+pub async fn launch() -> Result<(Child, RecommendedWatcher, Arc<Mutex<WatcherState>>)> {
     info!("Launchin interactive mode!");
     let config = config_loader::load_or_create()?;
     let plugin_folder: PathBuf = get_home_dir().join(&config.settings.plugin_folder);
@@ -31,11 +39,13 @@ pub async fn launch() -> Result<(Child, RecommendedWatcher)> {
 
     registry.to_file(&registry_file_path).await?;
 
-    let (tx, rx) = mpsc::channel::<RegistrySnapshot>(1);
-    info!("Before starting watching!");
-    let watcher: RecommendedWatcher = watcher::watch_file(&registry_file_path, tx.clone())?;
+    let watcher_state = Arc::new(Mutex::new(WatcherState {
+        registry_file_path: registry_file_path.clone(),
+        previous_snapshot: last_processed_registry_snapshot,
+    }));
 
-    event_dispatcher::listen(rx, last_processed_registry_snapshot);
+    info!("Before starting watching!");
+    let watcher: RecommendedWatcher = watcher::watch_file(watcher_state.clone()).await?;
 
     let child = Command::new("vd")
         .arg(&registry_file_path)
@@ -45,5 +55,6 @@ pub async fn launch() -> Result<(Child, RecommendedWatcher)> {
         .stderr(Stdio::inherit())
         .spawn()
         .expect("failed to start VisiData");
-    Ok((child, watcher))
+
+    Ok((child, watcher, watcher_state))
 }
