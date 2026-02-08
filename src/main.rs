@@ -48,11 +48,8 @@ async fn main() -> Result<()> {
     match cli.command {
         cli::args::Commands::Interactive => {
             info!("Starting interactive VDPM!");
-            let (mut interactive_process, _watcher, _watcher_state): (
-                Child,
-                RecommendedWatcher,
-                Arc<Mutex<WatcherState>>,
-            ) = interactive::launch().await?;
+            let (mut interactive_process, _watcher): (Child, RecommendedWatcher) =
+                interactive::launch().await?;
             interactive_process
                 .wait()
                 .expect("VisiData process failed!");

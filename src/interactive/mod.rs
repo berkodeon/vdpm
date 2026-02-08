@@ -21,7 +21,7 @@ pub struct WatcherState {
     previous_snapshot: RegistrySnapshot,
 }
 
-pub async fn launch() -> Result<(Child, RecommendedWatcher, Arc<Mutex<WatcherState>>)> {
+pub async fn launch() -> Result<(Child, RecommendedWatcher)> {
     info!("Launchin interactive mode!");
     let config = config_loader::load_or_create()?;
     let plugin_folder: PathBuf = get_home_dir().join(&config.settings.plugin_folder);
@@ -56,5 +56,5 @@ pub async fn launch() -> Result<(Child, RecommendedWatcher, Arc<Mutex<WatcherSta
         .spawn()
         .expect("failed to start VisiData");
 
-    Ok((child, watcher, watcher_state))
+    Ok((child, watcher))
 }

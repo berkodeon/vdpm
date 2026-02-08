@@ -1,5 +1,4 @@
-
-use tracing::{debug};
+use tracing::debug;
 
 use crate::{
     cli::{self, args::Commands},
@@ -14,11 +13,13 @@ struct PluginOperation {
     plugin: Plugin,
 }
 
-pub async fn on_registry_hash_change(
+pub async fn process_diff(
     last_processed_registry_snapshot: &RegistrySnapshot,
     new_registry_snapshot: &RegistrySnapshot,
 ) -> Result<()> {
-    // TODO @memedov, if registry snapshot created_at < last message processed, we should simply skip the message
+    if last_processed_registry_snapshot.hash == new_registry_snapshot.hash {
+        return Ok(());
+    }
 
     let operations: Vec<PluginOperation> = generate_operations(
         &last_processed_registry_snapshot.registry,
