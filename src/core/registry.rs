@@ -6,9 +6,13 @@ use crate::utils::get_home_dir;
 use csv::WriterBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use tokio;
+
+mod sealed {
+    pub trait Writable: std::io::Write {}
+
+    impl Writable for std::fs::File {}
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct Registry {
@@ -28,7 +32,7 @@ impl Registry {
             .has_headers(true)
             .from_reader(content.as_bytes());
 
-        let _plugins: BTreeMap<String, Plugin> = reader
+        let plugins: BTreeMap<String, Plugin> = reader
             .deserialize::<Plugin>()
             .collect::<std::result::Result<Vec<Plugin>, _>>()
             .map_err(|e| {
@@ -41,9 +45,7 @@ impl Registry {
             .map(|plugin| (plugin.name.clone(), plugin))
             .collect();
 
-        let empty: Vec<Plugin> = vec![];
-
-        Ok(Registry { plugins: empty.into_iter().map(|p| (p.name.clone(), p)).collect() })
+        Ok(Registry { plugins })
     }
 
     fn create_plugins_file(&self, path: &Path) -> Result<std::fs::File> {
@@ -55,10 +57,11 @@ impl Registry {
         })
     }
 
-    fn write_plugins<W: Write>(&self, wtr: W) -> Result<&Self> {
+    fn write_plugins<W: sealed::Writable>(&self, wtr: &mut W) -> Result<&Self> {
         let mut writer = WriterBuilder::new().has_headers(false).from_writer(wtr);
 
-        writer.write_record(vec!["name", "enabled", "installed"])
+        writer
+            .write_record(vec!["name", "enabled", "installed"])
             .map_err(|e| {
                 VDPMError::RegistryOperationError(
                     "Failed to write CSV headers".into(),
@@ -81,9 +84,9 @@ impl Registry {
     }
 
     pub async fn to_file(&self, path: &Path) -> Result<&Self> {
-        let file = self.create_plugins_file(path)?;
+        let mut file: std::fs::File = self.create_plugins_file(path)?;
 
-        self.write_plugins(file)?;
+        self.write_plugins(&mut file)?;
 
         Ok(self)
     }
@@ -108,11 +111,11 @@ impl Registry {
         Ok(self)
     }
 
-    pub async fn generate() -> Result<Self> {
-        let installed_plugins: HashSet<String> = Registry::get_installed_plugins()?;
-        let enabled_plugins: HashSet<String> = Registry::get_enabled_plugins().await?;
-
-        let _plugins: BTreeMap<String, Plugin> = installed_plugins
+    fn generate_with(
+        installed_plugins: HashSet<String>,
+        enabled_plugins: HashSet<String>,
+    ) -> Result<Self> {
+        let plugins: BTreeMap<String, Plugin> = installed_plugins
             .into_iter()
             .map(|plugin| {
                 let is_enabled: bool = enabled_plugins.contains(plugin.as_str());
@@ -127,12 +130,14 @@ impl Registry {
             })
             .collect();
 
+        Ok(Registry { plugins })
+    }
 
-        let empty: Vec<Plugin> = vec![];
+    pub async fn generate() -> Result<Self> {
+        let installed_plugins: HashSet<String> = Registry::get_installed_plugins()?;
+        let enabled_plugins: HashSet<String> = Registry::get_enabled_plugins().await?;
 
-        Ok(Registry { plugins: empty.into_iter().map(|p| (p.name.clone(), p)).collect() })
-
-        // Ok(Registry { plugins })
+        Ok(Self::generate_with(installed_plugins, enabled_plugins)?)
     }
 
     fn get_installed_plugins() -> Result<HashSet<String>> {
@@ -170,22 +175,27 @@ impl Registry {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::config_loader::SettingsOverrides;
-
+mod registry_unit_tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_should_write_plugins() {
-        config_loader::init(SettingsOverrides {
-            vd_version: "1.0.0".into(),
-        });
+    impl sealed::Writable for Vec<u8> {}
 
-        let registry = Registry::generate().await.unwrap();
-        let buffer: Vec<u8> = vec![];
+    #[test]
+    fn test_should_write_plugins() {
+        let installed_plugins: HashSet<String> = HashSet::from(["foo".into(), "bar".into()]);
+        let enabled_plugins: HashSet<String> = HashSet::from(["bar".into()]);
+        let registry = Registry::generate_with(installed_plugins, enabled_plugins).unwrap();
 
-        let _ = registry.write_plugins(buffer);
+        let mut buffer: Vec<u8> = vec![];
+        registry.write_plugins(&mut buffer).unwrap();
 
-        assert!(true == true);
+        let csv_string = String::from_utf8(buffer).unwrap();
+        let csv_content: Vec<&str> = csv_string.split("\n").collect();
+
+        assert_eq!(csv_content.len(), 4); // one extra new line in the end
+        assert!(csv_content.contains(&"name,enabled,installed"));
+        assert!(csv_content.contains(&"foo,false,true"));
+        assert!(csv_content.contains(&"bar,true,true"));
+        assert!(csv_content.contains(&""));
     }
 }
