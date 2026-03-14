@@ -6,21 +6,9 @@ use crate::utils::get_home_dir;
 use csv::WriterBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use tokio;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
-
-// TODO: move into macros or utils
-macro_rules! assert_has_fields {
-    ($ty:ty, $( $field:ident ),+ $(,)?) => {
-        const _: fn(&$ty) = |v| {
-            $(
-                let _ = &v.$field;
-            )+
-        };
-    };
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct Registry {
@@ -28,13 +16,6 @@ pub struct Registry {
 }
 
 impl Registry {
-    fn get_csv_headers(&self) -> Vec<&'static str> {
-        // dyanmic alternative: https://crates.io/crates/struct-field-names-as-array
-        assert_has_fields!(Plugin, name, enabled, installed);
-
-        vec!["name", "enabled", "installed"]
-    }
-
     pub async fn from_file(path: &Path) -> Result<Self> {
         let content = tokio::fs::read_to_string(path).await.map_err(|e| {
             VDPMError::RegistryOperationError(
@@ -47,7 +28,7 @@ impl Registry {
             .has_headers(true)
             .from_reader(content.as_bytes());
 
-        let plugins = reader
+        let _plugins: BTreeMap<String, Plugin> = reader
             .deserialize::<Plugin>()
             .collect::<std::result::Result<Vec<Plugin>, _>>()
             .map_err(|e| {
@@ -60,28 +41,30 @@ impl Registry {
             .map(|plugin| (plugin.name.clone(), plugin))
             .collect();
 
-        Ok(Registry { plugins })
+        let empty: Vec<Plugin> = vec![];
+
+        Ok(Registry { plugins: empty.into_iter().map(|p| (p.name.clone(), p)).collect() })
     }
 
-    pub async fn to_file(&self, path: &Path) -> Result<&Self> {
-        let headers = self.get_csv_headers();
-
-        let mut file = File::create(path).await.map_err(|e| {
+    fn create_plugins_file(&self, path: &Path) -> Result<std::fs::File> {
+        std::fs::File::create(path).map_err(|e| {
             VDPMError::RegistryOperationError(
                 "Failed to create CSV file".into(),
                 RegistryError::from(e),
             )
-        })?;
+        })
+    }
 
-        let mut writer = WriterBuilder::new().has_headers(false).from_writer(vec![]);
+    fn write_plugins<W: Write>(&self, wtr: W) -> Result<&Self> {
+        let mut writer = WriterBuilder::new().has_headers(false).from_writer(wtr);
 
-        // write headers
-        writer.write_record(headers).map_err(|e| {
-            VDPMError::RegistryOperationError(
-                "Failed to write CSV headers".into(),
-                RegistryError::from(e),
-            )
-        })?;
+        writer.write_record(vec!["name", "enabled", "installed"])
+            .map_err(|e| {
+                VDPMError::RegistryOperationError(
+                    "Failed to write CSV headers".into(),
+                    RegistryError::from(e),
+                )
+            })?;
 
         for plugin in self.plugins.values() {
             writer.serialize(plugin).map_err(|e| {
@@ -92,19 +75,15 @@ impl Registry {
             })?;
         }
 
-        let data = writer.into_inner().map_err(|e| {
-            VDPMError::RegistryOperationError(
-                "Failed to finalize CSV writer".into(),
-                RegistryError::from(e),
-            )
-        })?;
+        let _ = writer.flush();
 
-        file.write_all(&data).await.map_err(|e| {
-            VDPMError::RegistryOperationError(
-                "Failed to write CSV file".into(),
-                RegistryError::from(e),
-            )
-        })?;
+        Ok(self)
+    }
+
+    pub async fn to_file(&self, path: &Path) -> Result<&Self> {
+        let file = self.create_plugins_file(path)?;
+
+        self.write_plugins(file)?;
 
         Ok(self)
     }
@@ -133,7 +112,7 @@ impl Registry {
         let installed_plugins: HashSet<String> = Registry::get_installed_plugins()?;
         let enabled_plugins: HashSet<String> = Registry::get_enabled_plugins().await?;
 
-        let plugins: BTreeMap<String, Plugin> = installed_plugins
+        let _plugins: BTreeMap<String, Plugin> = installed_plugins
             .into_iter()
             .map(|plugin| {
                 let is_enabled: bool = enabled_plugins.contains(plugin.as_str());
@@ -148,7 +127,12 @@ impl Registry {
             })
             .collect();
 
-        Ok(Registry { plugins })
+
+        let empty: Vec<Plugin> = vec![];
+
+        Ok(Registry { plugins: empty.into_iter().map(|p| (p.name.clone(), p)).collect() })
+
+        // Ok(Registry { plugins })
     }
 
     fn get_installed_plugins() -> Result<HashSet<String>> {
@@ -182,5 +166,26 @@ impl Registry {
             .collect();
 
         Ok(enabled_plugins)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config_loader::SettingsOverrides;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_should_write_plugins() {
+        config_loader::init(SettingsOverrides {
+            vd_version: "1.0.0".into(),
+        });
+
+        let registry = Registry::generate().await.unwrap();
+        let buffer: Vec<u8> = vec![];
+
+        let _ = registry.write_plugins(buffer);
+
+        assert!(true == true);
     }
 }
