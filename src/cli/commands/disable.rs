@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use crate::config_loader::{self, AppConfig};
 use crate::core::registry::Registry;
 use crate::error::{PluginOperationError, Result, VDPMError};
@@ -17,7 +15,7 @@ pub async fn execute(name: &str) -> Result<Table> {
         plugin = %name,
         "Starting disabling plugin!"
     );
-    let config = config_loader::load_or_create()?;
+    let config: &AppConfig = config_loader::load_or_create()?;
     let rc_file = get_home_dir().join(&config.settings.rc_file);
     let mut registry = Registry::generate().await?;
 

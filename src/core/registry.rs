@@ -159,8 +159,6 @@ impl Registry {
                     VDPMError::VisidataRCError("VisidataRC could not be read!".into(), e)
                 })?;
 
-        tracing::debug!("visidata_rc_content {:?}", &visidata_rc_content);
-
         let enabled_plugins: HashSet<String> = visidata_rc_content
             .split("\n")
             .filter(|line| line.starts_with("import plugins."))
@@ -192,7 +190,7 @@ mod registry_unit_tests {
         let csv_string = String::from_utf8(buffer).unwrap();
         let csv_content: Vec<&str> = csv_string.split("\n").collect();
 
-        assert_eq!(csv_content.len(), 4); // one extra new line in the end
+        assert_eq!(csv_content.len(), 4);
         assert!(csv_content.contains(&"name,enabled,installed"));
         assert!(csv_content.contains(&"foo,false,true"));
         assert!(csv_content.contains(&"bar,true,true"));
