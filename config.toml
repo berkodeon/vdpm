@@ -2,9 +2,6 @@
 vdpm_config_folder_path = ".config/vdpm"
 plugin_manager_file = "plugins.csv"
 plugin_folder = ".visidata/plugins"
-
 rc_file = ".visidatarc"
-
 logs_dir = "vdpm_logs"
-
 vd_version=""

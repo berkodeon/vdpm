@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tabled::Tabled;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Tabled, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tabled, Hash, PartialEq)]
 pub struct Plugin {
     pub name: String,
     pub enabled: bool,
