@@ -1,8 +1,10 @@
 use std::process::Child;
+use std::sync::Arc;
 
 use clap::Parser;
 use notify::RecommendedWatcher;
 use tabled::Table;
+use tokio::sync::Mutex;
 use tracing::info;
 mod cli;
 mod config_loader;
@@ -16,6 +18,7 @@ mod utils;
 use crate::config_loader::SettingsOverrides;
 use crate::error::Result;
 use crate::fs::operations::create_visidata_rc;
+use crate::interactive::WatcherState;
 use crate::utils::{get_home_dir, get_vd_version};
 use cli::args::Cli;
 

@@ -4,6 +4,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use tokio::runtime::Handle;
 
 use crate::error::{Result, VDPMError};
 
@@ -50,6 +51,15 @@ pub fn hash<T: Hash>(value: &T) -> u64 {
     let mut s = DefaultHasher::new();
     value.hash(&mut s);
     s.finish()
+}
+
+pub fn get_runtime_handle() -> Handle {
+    let handle = match tokio::runtime::Handle::try_current() {
+        Ok(h) => h,
+        _ => panic!("Couldn't get current runtime handle"),
+    };
+
+    handle
 }
 
 #[cfg(test)]
