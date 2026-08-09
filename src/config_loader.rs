@@ -63,7 +63,8 @@ pub fn init(runtime_settings: RuntimeSettings) {
 
     CONFIG.get_or_init(|| {
         let config_str = include_str!("../config.toml");
-        let mut app_config: AppConfig = toml::de::from_str(config_str).unwrap();
+        let mut app_config: AppConfig =
+            toml::de::from_str(config_str).expect("Failed to parse embedded config.toml");
 
         app_config.settings.vd_version = runtime_settings.vd_version;
 
