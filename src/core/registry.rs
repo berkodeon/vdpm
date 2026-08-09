@@ -1,4 +1,4 @@
-use crate::config_loader::{self, AppConfig};
+use crate::config_loader;
 use crate::core::plugin::Plugin;
 use crate::error::{RegistryError, Result, VDPMError};
 use crate::fs::operations::list_files_by_extension;
@@ -123,7 +123,7 @@ impl Registry {
 
     fn get_installed_plugins() -> Result<HashSet<String>> {
         // TODO @memedov, let's make it async also!
-        let config: AppConfig = config_loader::load_or_create()?;
+        let config = config_loader::load_or_create()?;
         let installed_plugins: HashSet<String> = list_files_by_extension(
             &get_home_dir().join(&config.settings.plugin_folder),
             "py".to_string(),
@@ -132,7 +132,7 @@ impl Registry {
     }
 
     async fn get_enabled_plugins() -> Result<HashSet<String>> {
-        let config: AppConfig = config_loader::load_or_create()?;
+        let config = config_loader::load_or_create()?;
         let visidata_rc_content =
             tokio::fs::read_to_string(&get_home_dir().join(&config.settings.rc_file))
                 .await

@@ -14,16 +14,18 @@ mod interactive;
 mod logger;
 mod utils;
 
-use crate::config_loader::AppConfig;
+use crate::config_loader::RuntimeSettings;
 use crate::error::Result;
 use crate::fs::operations::create_visidata_rc;
-use crate::utils::get_home_dir;
+use crate::utils::{get_home_dir, get_vd_version};
 use cli::args::Cli;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // TODO @memedov we should check if visidata is installed!
-    let config: AppConfig = config_loader::load_or_create()?;
+    let vd_version = get_vd_version()?;
+
+    config_loader::init(RuntimeSettings { vd_version });
+    let config = config_loader::load_or_create()?;
 
     let _logger_guard = logger::init(&config.settings.logs_dir);
     tracing::info!("Starting VDPM!");
@@ -41,7 +43,7 @@ async fn main() -> Result<()> {
         cli::args::Commands::Interactive => {
             info!("Starting interactive VDPM!");
             let (mut interactive_process, _watcher): (Child, RecommendedWatcher) =
-                interactive::launch(config).await?;
+                interactive::launch().await?;
             interactive_process
                 .wait()
                 .expect("VisiData process failed!");

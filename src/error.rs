@@ -6,11 +6,17 @@ pub enum VDPMError {
     #[error("File watcher error")]
     FileWatcherError(#[from] notify::Error),
 
-    #[error("Configuration error: {0}: {1}")]
-    ConfigError(String, toml::de::Error),
-
     #[error("Visidata RC error: {0}: {1}")]
     VisidataRCError(String, std::io::Error),
+
+    #[error("CLI command error: {0}: {1}")]
+    CLICommandError(&'static str, std::io::Error),
+
+    #[error("String error: {0}: {1}")]
+    StringFromUtf8Error(&'static str, std::string::FromUtf8Error),
+
+    #[error("Regex match error error: {0}")]
+    RegexMatchError(&'static str),
 
     #[error("Plugin error: {0}: {1}")]
     PluginError(String, PluginOperationError),

@@ -1,4 +1,4 @@
-use crate::config_loader::{self, AppConfig};
+use crate::config_loader;
 use crate::error::Result;
 use crate::utils::get_home_dir;
 use std::{fs, path::PathBuf};
@@ -15,10 +15,10 @@ fn create_vdpm_config_directory(config_path: &str) -> PathBuf {
 }
 
 pub fn get_registry_file_path() -> Result<PathBuf> {
-    let config: AppConfig = config_loader::load_or_create()?;
+    let config = config_loader::load_or_create()?;
 
     let vdpm_config_directory =
         create_vdpm_config_directory(&config.settings.vdpm_config_folder_path);
-    let vdpm_config_file_path = vdpm_config_directory.join(config.settings.plugin_manager_file);
+    let vdpm_config_file_path = vdpm_config_directory.join(&config.settings.plugin_manager_file);
     Ok(vdpm_config_file_path)
 }

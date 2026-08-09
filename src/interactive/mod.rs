@@ -1,8 +1,8 @@
 use crate::config_loader;
+use crate::core::registry::Registry;
 use crate::error::Result;
 use crate::fs::paths::get_registry_file_path;
 use crate::utils::{get_home_dir, hash};
-use crate::{config_loader::AppConfig, core::registry::Registry};
 use notify::RecommendedWatcher;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -13,9 +13,9 @@ pub mod registry_snapshot;
 mod watcher;
 use registry_snapshot::RegistrySnapshot;
 
-pub async fn launch(app_config: AppConfig) -> Result<(Child, RecommendedWatcher)> {
+pub async fn launch() -> Result<(Child, RecommendedWatcher)> {
     info!("Launchin interactive mode!");
-    let config: AppConfig = config_loader::load_or_create()?;
+    let config = config_loader::load_or_create()?;
     let plugin_folder: PathBuf = get_home_dir().join(&config.settings.plugin_folder);
     let visidata_dir = plugin_folder
         .parent()
