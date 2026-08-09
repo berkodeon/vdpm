@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-use crate::interactive::registry_snapshot::RegistrySnapshot;
 #[derive(Error, Debug)]
 pub enum VDPMError {
     #[error("File watcher error")]
@@ -20,12 +19,6 @@ pub enum VDPMError {
 
     #[error("Plugin error: {0}: {1}")]
     PluginError(String, PluginOperationError),
-
-    #[error("Visidata RC error: {0}: {1}")]
-    RegistryFileChangeHandlerError(
-        String,
-        tokio::sync::mpsc::error::SendError<RegistrySnapshot>,
-    ),
 
     #[error("Reading registry failed: {0}: {1}")]
     RegistryOperationError(String, RegistryError),

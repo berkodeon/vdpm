@@ -4,14 +4,22 @@ use crate::error::Result;
 use crate::fs::paths::get_registry_file_path;
 use crate::utils::{get_home_dir, hash};
 use notify::RecommendedWatcher;
+use registry_snapshot::RegistrySnapshot;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tracing::info;
+
 mod event_dispatcher;
 pub mod registry_snapshot;
 mod watcher;
-use registry_snapshot::RegistrySnapshot;
+
+#[derive(Debug)]
+pub struct WatcherState {
+    registry_file_path: PathBuf,
+    previous_snapshot: RegistrySnapshot,
+}
 
 pub async fn launch() -> Result<(Child, RecommendedWatcher)> {
     info!("Launchin interactive mode!");
@@ -24,17 +32,19 @@ pub async fn launch() -> Result<(Child, RecommendedWatcher)> {
 
     let registry_file_path: PathBuf = get_registry_file_path()?;
     let registry = Registry::generate().await?;
-    let last_processed_registry_snapshot = RegistrySnapshot {
+    let previous_snapshot = RegistrySnapshot {
         hash: hash(&registry),
         registry: registry.clone(),
     };
 
     registry.to_file(&registry_file_path).await?;
 
-    let (tx, mut rx) = mpsc::channel::<RegistrySnapshot>(1);
-    let watcher: RecommendedWatcher = watcher::watch_file(&registry_file_path, tx.clone())?;
+    let watcher_state = Arc::new(Mutex::new(WatcherState {
+        registry_file_path: registry_file_path.clone(),
+        previous_snapshot,
+    }));
 
-    event_dispatcher::listen(rx, last_processed_registry_snapshot);
+    let watcher: RecommendedWatcher = watcher::watch_file(watcher_state).await?;
 
     let child = Command::new("vd")
         .arg(&registry_file_path)
