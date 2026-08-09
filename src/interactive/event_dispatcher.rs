@@ -22,7 +22,6 @@ pub fn listen(
     last_processed_registry_snapshot: RegistrySnapshot,
 ) {
     tokio::spawn(async move {
-        debug!("we started reading the event line!");
         if let Err(e) = listen_registry_changes(rx, last_processed_registry_snapshot).await {
             // @memedov: what do you think about coming up with reverting logic!
             error!("registry listener failed: {e}");
@@ -112,8 +111,6 @@ fn generate_operations(old_registry: &Registry, new_registry: &Registry) -> Vec<
             }
         }
     }
-
-    tracing::debug!("#kalkulating berk# {:#?}", &operations);
 
     operations
 }

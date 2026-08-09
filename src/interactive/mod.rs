@@ -32,7 +32,6 @@ pub async fn launch(app_config: AppConfig) -> Result<(Child, RecommendedWatcher)
     registry.to_file(&registry_file_path).await?;
 
     let (tx, mut rx) = mpsc::channel::<RegistrySnapshot>(1);
-    info!("Before starting watching!");
     let watcher: RecommendedWatcher = watcher::watch_file(&registry_file_path, tx.clone())?;
 
     event_dispatcher::listen(rx, last_processed_registry_snapshot);

@@ -51,7 +51,6 @@ async fn process_file_change(
     let event = event_result?;
     if let EventKind::Modify(ModifyKind::Data(_)) = event.kind {
         let current_registry = Registry::from_file(&file_path).await?;
-        info!("Processing file change started!");
         let current_registry_hash = hash(&current_registry);
         let current_registry_snapshot = RegistrySnapshot {
             registry: current_registry,
