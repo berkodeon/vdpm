@@ -14,7 +14,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install VisiData
+      run: pip install visidata==$(cat .visidata-version)
     - name: Build
       run: cargo build --verbose
+    - name: Install cargo-insta
+      run: cargo install cargo-insta --locked
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo insta test --unreferenced=reject

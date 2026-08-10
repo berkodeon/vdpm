@@ -28,13 +28,13 @@ pub async fn execute(name: &str) -> Result<Table> {
         "Resolved plugin file path"
     );
 
-    let mut file: File = create_plugin_file(name, &plugin_file_path).await?;
-
     let plugin_content: String = download_plugin(name).await?;
     debug!(
         content_bytes = plugin_content.len(),
         "Plugin downloaded successfully"
     );
+
+    let mut file: File = create_plugin_file(name, &plugin_file_path).await?;
 
     file.write_all(plugin_content.as_bytes())
         .await

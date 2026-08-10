@@ -29,3 +29,8 @@ regex = "1.12.2"
 [dev-dependencies]
 tempfile = "3.27.0"
 serial_test = "3.4.0"
+assert_cmd = "2.2.2"
+assert_fs = "1.1.4"
+predicates = "3.1.4"
+rstest = "0.26.1"
+insta = "1.48.0"

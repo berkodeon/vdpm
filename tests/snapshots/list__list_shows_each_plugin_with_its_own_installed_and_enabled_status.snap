@@ -1,0 +1,12 @@
+---
+source: tests/list.rs
+assertion_line: 27
+expression: output
+---
++------+---------+-----------+
+| name | enabled | installed |
++------+---------+-----------+
+| toml | false   | true      |
++------+---------+-----------+
+| yaml | true    | true      |
++------+---------+-----------+

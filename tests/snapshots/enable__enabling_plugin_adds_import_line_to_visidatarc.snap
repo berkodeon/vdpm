@@ -1,0 +1,5 @@
+---
+source: tests/enable.rs
+expression: env.visidatarc_contents()
+---
+import plugins.toml

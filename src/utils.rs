@@ -8,6 +8,10 @@ use std::process::{Command, Stdio};
 use crate::error::{Result, VDPMError};
 
 pub fn get_home_dir() -> PathBuf {
+    if let Ok(vdpm_home) = std::env::var("VDPM_HOME") {
+        return PathBuf::from(vdpm_home);
+    }
+
     if let Some(base_dirs) = BaseDirs::new() {
         base_dirs.home_dir().to_path_buf()
     } else {

@@ -1,0 +1,10 @@
+---
+source: tests/install.rs
+assertion_line: 15
+expression: output
+---
++------+---------+-----------+
+| name | enabled | installed |
++------+---------+-----------+
+| toml | false   | true      |
++------+---------+-----------+

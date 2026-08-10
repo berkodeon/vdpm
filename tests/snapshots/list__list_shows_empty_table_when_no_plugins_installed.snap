@@ -1,0 +1,8 @@
+---
+source: tests/list.rs
+assertion_line: 14
+expression: output
+---
++------+---------+-----------+
+| name | enabled | installed |
++------+---------+-----------+
