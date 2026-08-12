@@ -2,7 +2,7 @@
 mod support;
 
 use support::known_plugins::STABLE_PLUGIN;
-use support::{VdpmTestEnv, env};
+use support::{AssertExt, VdpmTestEnv, env};
 
 #[rstest::rstest]
 fn test_install_adds_plugin_file(env: VdpmTestEnv) {
@@ -19,8 +19,7 @@ fn test_install_adds_plugin_file(env: VdpmTestEnv) {
 fn test_install_nonexistent_plugin_fails(env: VdpmTestEnv) {
     // When
     env.try_install("definitely-not-a-real-plugin-xyz")
-        .failure()
-        .stderr(predicates::str::contains("PluginError"));
+        .assert_failure_containing("failed to download plugin");
 
     // Then
     env.assert_not_installed("definitely-not-a-real-plugin-xyz");

@@ -1,6 +1,7 @@
 use tokio::fs::OpenOptions;
 
-use crate::error::{Result, VDPMError};
+use crate::error::Result;
+use anyhow::Context;
 use std::collections::HashSet;
 use std::fs;
 use std::io::ErrorKind;
@@ -35,9 +36,6 @@ pub async fn create_visidata_rc(rc_file_path: &Path) -> Result<()> {
     {
         Ok(_) => Ok(()),
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
-        Err(e) => Err(VDPMError::VisidataRCError(
-            "Failed to create .visidatarc".into(),
-            e,
-        )),
+        Err(e) => Err(e).context("failed to create .visidatarc file"),
     }
 }

@@ -1,7 +1,8 @@
 use crate::cli::commands::disable;
 use crate::config_loader;
-use crate::error::{RegistryError, Result, VDPMError};
+use crate::error::Result;
 use crate::utils::get_home_dir;
+use anyhow::Context;
 use tabled::Table;
 use tracing::info;
 
@@ -15,12 +16,7 @@ pub async fn execute(name: &str) -> Result<Table> {
 
     tokio::fs::remove_file(plugin_file_path)
         .await
-        .map_err(|e| {
-            VDPMError::RegistryOperationError(
-                format!("Failed to delete the plugin({})", name),
-                RegistryError::from(e),
-            )
-        })?;
+        .with_context(|| format!("failed to delete plugin file for \"{name}\""))?;
 
     Ok(disabled_plugin_result)
 }

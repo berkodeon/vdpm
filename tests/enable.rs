@@ -2,7 +2,7 @@
 mod support;
 
 use support::known_plugins::STABLE_PLUGIN;
-use support::{VdpmTestEnv, env};
+use support::{AssertExt, VdpmTestEnv, env};
 
 #[rstest::rstest]
 fn test_enable_previously_installed_plugin(env: VdpmTestEnv) {
@@ -21,8 +21,7 @@ fn test_enable_previously_installed_plugin(env: VdpmTestEnv) {
 fn test_enable_never_installed_plugin_fails(env: VdpmTestEnv) {
     // When
     env.try_enable("not-installed")
-        .failure()
-        .stderr(predicates::str::contains("PluginError"));
+        .assert_failure_containing("is not installed");
 
     // Then
     env.assert_disabled("not-installed");

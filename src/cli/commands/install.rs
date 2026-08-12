@@ -3,9 +3,10 @@ use std::path::PathBuf;
 use crate::config_loader;
 
 use crate::core::plugin::Plugin;
-use crate::error::{PluginOperationError, Result, VDPMError};
+use crate::error::Result;
 use crate::utils::get_home_dir;
 
+use anyhow::Context;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use tabled::Table;
 use tokio::fs::File;
@@ -38,12 +39,7 @@ pub async fn execute(name: &str) -> Result<Table> {
 
     file.write_all(plugin_content.as_bytes())
         .await
-        .map_err(|e| {
-            VDPMError::PluginError(
-                "Failed to write plugin content to disk".into(),
-                PluginOperationError::from(e),
-            )
-        })?;
+        .context("failed to write plugin file to disk")?;
 
     info!("Plugin installed successfully");
 
@@ -62,23 +58,17 @@ async fn create_plugin_file(name: &str, path: &PathBuf) -> Result<File> {
             "Ensuring plugin directory exists"
         );
 
-        tokio::fs::create_dir_all(parent_path).await.map_err(|e| {
-            VDPMError::PluginError(
-                format!("Failed to create plugin directory for plugin({})", name).into(),
-                PluginOperationError::from(e),
-            )
-        })?;
+        tokio::fs::create_dir_all(parent_path)
+            .await
+            .with_context(|| format!("failed to create plugin directory for \"{name}\""))?;
     } else {
         warn!("Plugin path has no parent directory");
     }
 
     debug!("Creating plugin file");
-    File::create(path).await.map_err(|e| {
-        VDPMError::PluginError(
-            "Failed to create plugin file".into(),
-            PluginOperationError::from(e),
-        )
-    })
+    File::create(path)
+        .await
+        .context("failed to create plugin file")
 }
 
 #[instrument(level = "info", skip_all, fields(plugin = %name))]
@@ -106,26 +96,16 @@ async fn download_plugin(name: &str) -> Result<String> {
         .headers(headers)
         .send()
         .await
-        .map_err(|e| {
-            VDPMError::PluginError(
-                format!("HTTP request failed for plugin({})", name),
-                PluginOperationError::from(e),
-            )
-        })?;
+        .with_context(|| format!("failed to reach GitHub while downloading plugin \"{name}\""))?;
 
-    let response = response.error_for_status().map_err(|e| {
-        VDPMError::PluginError(
-            format!("Non-success HTTP status while downloading plugin({})", name),
-            PluginOperationError::from(e),
-        )
-    })?;
+    let response = response
+        .error_for_status()
+        .with_context(|| format!("failed to download plugin \"{name}\""))?;
 
-    let text = response.text().await.map_err(|e| {
-        VDPMError::PluginError(
-            format!("Failed to read response body for plugin({})", name),
-            PluginOperationError::from(e),
-        )
-    })?;
+    let text = response
+        .text()
+        .await
+        .with_context(|| format!("failed to read downloaded content for plugin \"{name}\""))?;
 
     debug!(content_bytes = text.len(), "Plugin content retrieved");
     Ok(text)

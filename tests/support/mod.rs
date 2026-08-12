@@ -122,11 +122,16 @@ impl Drop for VdpmTestEnv {
 
 pub trait AssertExt {
     fn stdout_string(&self) -> String;
+    fn assert_failure_containing(self, needle: &str) -> Self;
 }
 
 impl AssertExt for assert_cmd::assert::Assert {
     fn stdout_string(&self) -> String {
         String::from_utf8(self.get_output().stdout.clone()).unwrap()
+    }
+
+    fn assert_failure_containing(self, needle: &str) -> Self {
+        self.failure().stderr(predicates::str::contains(needle))
     }
 }
 

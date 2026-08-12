@@ -5,7 +5,8 @@ use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use crate::error::{Result, VDPMError};
+use crate::error::Result;
+use anyhow::Context;
 
 pub fn get_home_dir() -> PathBuf {
     if let Ok(vdpm_home) = std::env::var("VDPM_HOME") {
@@ -24,11 +25,10 @@ pub fn get_vd_version() -> Result<String> {
         .args(["-v"])
         .stdout(Stdio::piped())
         .output()
-        .map_err(|e| VDPMError::CLICommandError("Cannot execute 'vd -v':", e))?;
+        .context("failed to execute 'vd -v'")?;
 
-    let output = String::from_utf8(input.stdout).map_err(|e| {
-        VDPMError::StringFromUtf8Error("Couldn't convert stdout to utf-8 string: ", e)
-    })?;
+    let output =
+        String::from_utf8(input.stdout).context("'vd -v' output was not valid utf-8")?;
 
     let regex: Regex = Regex::new(r"(\d+.)?(\d+.)?(\*|\d+)").unwrap();
 
@@ -37,16 +37,12 @@ pub fn get_vd_version() -> Result<String> {
             let version = matching_result.as_str();
 
             if version.is_empty() {
-                return Err(VDPMError::RegexMatchError(
-                    "Version regex match result is empty",
-                ));
+                anyhow::bail!("'vd -v' output did not contain a parseable version");
             }
 
             Ok(version.to_owned())
         }
-        _ => Err(VDPMError::RegexMatchError(
-            "Couldn't extract version number from vd command output",
-        )),
+        _ => anyhow::bail!("could not find a version number in 'vd -v' output"),
     }
 }
 

@@ -1,8 +1,9 @@
 use crate::config_loader;
 use crate::core::plugin::Plugin;
-use crate::error::{RegistryError, Result, VDPMError};
+use crate::error::Result;
 use crate::fs::operations::list_files_by_extension;
 use crate::utils::get_home_dir;
+use anyhow::Context;
 use csv::WriterBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
@@ -15,12 +16,9 @@ pub struct Registry {
 
 impl Registry {
     pub async fn from_file(path: &Path) -> Result<Self> {
-        let content = tokio::fs::read_to_string(path).await.map_err(|e| {
-            VDPMError::RegistryOperationError(
-                "Failed to read registry file".into(),
-                RegistryError::from(e),
-            )
-        })?;
+        let content = tokio::fs::read_to_string(path)
+            .await
+            .context("failed to read registry file")?;
 
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(true)
@@ -29,12 +27,7 @@ impl Registry {
         let plugins: BTreeMap<String, Plugin> = reader
             .deserialize::<Plugin>()
             .collect::<std::result::Result<Vec<Plugin>, _>>()
-            .map_err(|e| {
-                VDPMError::RegistryOperationError(
-                    "Failed to parse CSV registry file".into(),
-                    RegistryError::from(e),
-                )
-            })?
+            .context("failed to parse registry file as csv")?
             .into_iter()
             .map(|plugin| (plugin.name.clone(), plugin))
             .collect();
@@ -43,12 +36,7 @@ impl Registry {
     }
 
     fn create_plugins_file(&self, path: &Path) -> Result<std::fs::File> {
-        std::fs::File::create(path).map_err(|e| {
-            VDPMError::RegistryOperationError(
-                "Failed to create CSV file".into(),
-                RegistryError::from(e),
-            )
-        })
+        std::fs::File::create(path).context("failed to create registry file")
     }
 
     fn write_plugins<W: std::io::Write>(&self, wtr: &mut W) -> Result<&Self> {
@@ -56,20 +44,12 @@ impl Registry {
 
         writer
             .write_record(vec!["name", "enabled", "installed"])
-            .map_err(|e| {
-                VDPMError::RegistryOperationError(
-                    "Failed to write CSV headers".into(),
-                    RegistryError::from(e),
-                )
-            })?;
+            .context("failed to write registry csv headers")?;
 
         for plugin in self.plugins.values() {
-            writer.serialize(plugin).map_err(|e| {
-                VDPMError::RegistryOperationError(
-                    "Failed to serialize plugin to CSV".into(),
-                    RegistryError::from(e),
-                )
-            })?;
+            writer
+                .serialize(plugin)
+                .context("failed to write plugin row to registry")?;
         }
 
         let _ = writer.flush();
@@ -86,13 +66,6 @@ impl Registry {
     }
 
     pub async fn to_visidatarc_file(&self, path: &PathBuf) -> Result<&Self> {
-        let map_err = |e| {
-            VDPMError::RegistryOperationError(
-                "Failed to write to .visidatarc file".into(),
-                RegistryError::from(e),
-            )
-        };
-
         let content = self
             .plugins
             .values()
@@ -100,7 +73,9 @@ impl Registry {
             .map(|p| format!("import plugins.{}", p.name))
             .collect::<Vec<_>>()
             .join("\n");
-        tokio::fs::write(path, content).await.map_err(map_err)?;
+        tokio::fs::write(path, content)
+            .await
+            .context("failed to write .visidatarc file")?;
 
         Ok(self)
     }
@@ -148,9 +123,7 @@ impl Registry {
         let visidata_rc_content =
             tokio::fs::read_to_string(&get_home_dir().join(&config.settings.rc_file))
                 .await
-                .map_err(|e| {
-                    VDPMError::VisidataRCError("VisidataRC could not be read!".into(), e)
-                })?;
+                .context("failed to read .visidatarc file")?;
 
         let enabled_plugins: HashSet<String> = visidata_rc_content
             .split("\n")
