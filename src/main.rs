@@ -1,24 +1,17 @@
-use std::path::Path;
 use std::process::Child;
 
 use clap::Parser;
 use notify::RecommendedWatcher;
 use tabled::Table;
 use tracing::info;
-mod cli;
-mod config_loader;
-mod core;
-mod error;
-mod fs;
-mod interactive;
-mod logger;
-mod utils;
 
-use crate::config_loader::RuntimeSettings;
-use crate::error::Result;
-use crate::fs::operations::create_visidata_rc;
-use crate::utils::{get_home_dir, get_vd_version};
-use cli::args::Cli;
+use vdpm::cli::{self, args::Cli};
+use vdpm::config_loader::{self, RuntimeSettings};
+use vdpm::error::Result;
+use vdpm::fs::operations::create_visidata_rc;
+use vdpm::interactive;
+use vdpm::logger;
+use vdpm::utils::{get_home_dir, get_vd_version};
 
 #[tokio::main]
 async fn main() -> Result<()> {

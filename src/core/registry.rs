@@ -2,6 +2,7 @@ use crate::config_loader;
 use crate::core::plugin::Plugin;
 use crate::error::Result;
 use crate::fs::operations::list_files_by_extension;
+use crate::fs::paths::get_registry_file_path;
 use crate::utils::get_home_dir;
 use anyhow::Context;
 use csv::WriterBuilder;
@@ -80,6 +81,17 @@ impl Registry {
         Ok(self)
     }
 
+    pub async fn persist(&self) -> Result<&Self> {
+        let config = config_loader::load_or_create()?;
+        let rc_file_path = get_home_dir().join(&config.settings.rc_file);
+        let registry_path = get_registry_file_path()?;
+
+        self.to_file(&registry_path).await?;
+        self.to_visidatarc_file(&rc_file_path).await?;
+
+        Ok(self)
+    }
+
     fn generate_with(
         installed_plugins: HashSet<String>,
         enabled_plugins: HashSet<String>,
@@ -104,9 +116,24 @@ impl Registry {
 
     pub async fn generate() -> Result<Self> {
         let installed_plugins: HashSet<String> = Registry::get_installed_plugins()?;
-        let enabled_plugins: HashSet<String> = Registry::get_enabled_plugins().await?;
+        let registry_path = get_registry_file_path()?;
 
-        Self::generate_with(installed_plugins, enabled_plugins)
+        let enabled_plugins: HashSet<String> = match Self::from_file(&registry_path).await {
+            Ok(persisted) => persisted
+                .plugins
+                .values()
+                .filter(|plugin| plugin.enabled)
+                .map(|plugin| plugin.name.clone())
+                .collect(),
+            Err(_) => Self::get_enabled_plugins_from_visidatarc()
+                .await
+                .unwrap_or_default(),
+        };
+
+        let registry = Self::generate_with(installed_plugins, enabled_plugins)?;
+        registry.persist().await?;
+
+        Ok(registry)
     }
 
     fn get_installed_plugins() -> Result<HashSet<String>> {
@@ -118,7 +145,7 @@ impl Registry {
         Ok(installed_plugins)
     }
 
-    async fn get_enabled_plugins() -> Result<HashSet<String>> {
+    async fn get_enabled_plugins_from_visidatarc() -> Result<HashSet<String>> {
         let config = config_loader::load_or_create()?;
         let visidata_rc_content =
             tokio::fs::read_to_string(&get_home_dir().join(&config.settings.rc_file))

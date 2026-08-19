@@ -37,8 +37,6 @@ pub async fn launch() -> Result<(Child, RecommendedWatcher)> {
         registry: registry.clone(),
     };
 
-    registry.to_file(&registry_file_path).await?;
-
     let watcher_state = Arc::new(Mutex::new(WatcherState {
         registry_file_path: registry_file_path.clone(),
         previous_snapshot,

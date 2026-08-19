@@ -4,6 +4,15 @@ use assert_fs::prelude::*;
 
 pub mod known_plugins;
 
+fn settings() -> &'static vdpm::config_loader::Settings {
+    vdpm::config_loader::init(vdpm::config_loader::RuntimeSettings {
+        vd_version: String::new(),
+    });
+    &vdpm::config_loader::load_or_create()
+        .expect("failed to load embedded config.toml")
+        .settings
+}
+
 pub struct VdpmTestEnv {
     home: Option<assert_fs::TempDir>,
     last_stdout: RefCell<String>,
@@ -36,11 +45,26 @@ impl VdpmTestEnv {
     }
 
     pub fn visidatarc_contents(&self) -> String {
-        std::fs::read_to_string(self.home().child(".visidatarc").path()).unwrap_or_default()
+        std::fs::read_to_string(self.visidatarc_path().path()).unwrap_or_default()
     }
 
-    pub fn plugin_file(&self, name: &str) -> assert_fs::fixture::ChildPath {
-        self.home().child(format!(".visidata/plugins/{name}.py"))
+    fn plugin_file(&self, name: &str) -> assert_fs::fixture::ChildPath {
+        self.home()
+            .child(format!("{}/{name}.py", settings().plugin_folder))
+    }
+
+    pub fn plugin_file_contents(&self, name: &str) -> String {
+        std::fs::read_to_string(self.plugin_file(name).path()).unwrap_or_default()
+    }
+
+    pub fn visidatarc_path(&self) -> assert_fs::fixture::ChildPath {
+        self.home().child(&settings().rc_file)
+    }
+
+    pub fn plugins_csv_path(&self) -> assert_fs::fixture::ChildPath {
+        let s = settings();
+        self.home()
+            .child(format!("{}/{}", s.vdpm_config_folder_path, s.plugin_manager_file))
     }
 
     pub fn install(&self, name: &str) -> &Self {
@@ -87,16 +111,18 @@ impl VdpmTestEnv {
     }
     pub fn assert_enabled(&self, name: &str) -> &Self {
         let contents = self.visidatarc_contents();
+        let line = format!("import plugins.{name}");
         assert!(
-            contents.contains(&format!("import plugins.{name}")),
+            contents.lines().any(|l| l == line),
             "expected .visidatarc to contain plugin \"{name}\", got:\n{contents}"
         );
         self
     }
     pub fn assert_disabled(&self, name: &str) -> &Self {
         let contents = self.visidatarc_contents();
+        let line = format!("import plugins.{name}");
         assert!(
-            !contents.contains(&format!("import plugins.{name}")),
+            !contents.lines().any(|l| l == line),
             "expected .visidatarc NOT to contain plugin \"{name}\", got:\n{contents}"
         );
         self

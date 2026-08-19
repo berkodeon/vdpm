@@ -1,0 +1,7 @@
+---
+source: tests/uninstall.rs
+expression: output
+---
++------+---------+-----------+
+| name | enabled | installed |
++------+---------+-----------+
