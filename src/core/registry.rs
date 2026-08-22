@@ -41,11 +41,7 @@ impl Registry {
     }
 
     fn write_plugins<W: std::io::Write>(&self, wtr: &mut W) -> Result<&Self> {
-        let mut writer = WriterBuilder::new().has_headers(false).from_writer(wtr);
-
-        writer
-            .write_record(vec!["name", "enabled", "installed"])
-            .context("failed to write registry csv headers")?;
+        let mut writer = WriterBuilder::new().from_writer(wtr);
 
         for plugin in self.plugins.values() {
             writer
