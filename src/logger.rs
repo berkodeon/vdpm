@@ -5,8 +5,8 @@ use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt};
 
-pub fn init(log_folder: &str) -> WorkerGuard {
-    let log_dir = crate::utils::get_home_dir().join(log_folder);
+pub fn init() -> WorkerGuard {
+    let log_dir = crate::utils::get_cache_dir().join("logs");
     if !log_dir.exists() {
         fs::create_dir_all(&log_dir).expect("Failed to create logs directory");
     }

@@ -1,4 +1,4 @@
-use directories::BaseDirs;
+use directories::{BaseDirs, ProjectDirs};
 use regex::Regex;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -17,6 +17,18 @@ pub fn get_home_dir() -> PathBuf {
         base_dirs.home_dir().to_path_buf()
     } else {
         panic!("Unable to find home directory")
+    }
+}
+
+pub fn get_cache_dir() -> PathBuf {
+    if let Ok(vdpm_home) = std::env::var("VDPM_HOME") {
+        return PathBuf::from(vdpm_home).join(".cache").join("vdpm");
+    }
+
+    if let Some(proj_dirs) = ProjectDirs::from("", "", "vdpm") {
+        proj_dirs.cache_dir().to_path_buf()
+    } else {
+        panic!("Unable to find cache directory")
     }
 }
 

@@ -16,7 +16,6 @@ pub struct Settings {
     pub plugin_manager_file: String,
     pub plugin_folder: String,
     pub rc_file: String,
-    pub logs_dir: String,
     #[serde(default)]
     pub vd_version: String,
 }
@@ -29,12 +28,11 @@ impl fmt::Display for Settings {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "plugin_dir: {}, plugin_file: {}, plugin_folder: {}, rc_file: {}, logs_dir: {}",
+            "plugin_dir: {}, plugin_file: {}, plugin_folder: {}, rc_file: {}",
             self.vdpm_config_folder_path,
             self.plugin_manager_file,
             self.plugin_folder,
             self.rc_file,
-            self.logs_dir,
         )
     }
 }

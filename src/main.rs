@@ -20,13 +20,9 @@ async fn main() -> Result<()> {
     config_loader::init(RuntimeSettings { vd_version });
     let config = config_loader::load_or_create()?;
 
-    let _logger_guard = logger::init(&config.settings.logs_dir);
+    let _logger_guard = logger::init();
     tracing::info!("Starting VDPM!");
-    tracing::debug!(
-        "Config(from: {}) is loaded: {}",
-        &config.settings.logs_dir,
-        config
-    );
+    tracing::debug!("Config loaded: {}", config);
 
     create_visidata_rc(&get_home_dir().join(&config.settings.rc_file)).await?;
 
