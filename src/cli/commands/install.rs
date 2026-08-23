@@ -76,7 +76,8 @@ async fn download_plugin(name: &str) -> Result<String> {
     let config = config_loader::load_or_create()?;
     let visidata_version = format!("v{}", config.settings.vd_version);
     let repo_url = format!(
-        "https://raw.githubusercontent.com/saulpw/visidata/{}/visidata/loaders",
+        "{}/saulpw/visidata/{}/visidata/loaders",
+        crate::utils::get_github_raw_base_url(),
         visidata_version
     );
     let plugin_download_url = format!("{}/{}.py", repo_url, name);

@@ -32,6 +32,11 @@ pub fn get_cache_dir() -> PathBuf {
     }
 }
 
+pub fn get_github_raw_base_url() -> String {
+    std::env::var("VDPM_GITHUB_BASE_URL")
+        .unwrap_or_else(|_| "https://raw.githubusercontent.com".to_string())
+}
+
 pub fn get_vd_version() -> Result<String> {
     let input = Command::new("vd")
         .args(["-v"])

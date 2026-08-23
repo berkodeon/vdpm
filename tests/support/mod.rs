@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 
 use assert_fs::prelude::*;
+use httpmock::MockServer;
 
 pub mod known_plugins;
 
@@ -13,29 +14,60 @@ fn settings() -> &'static vdpm::config_loader::Settings {
         .settings
 }
 
+fn should_use_real_github() -> bool {
+    std::env::var("VDPM_TEST_GITHUB_MODE").as_deref() == Ok("real")
+}
+
 pub struct VdpmTestEnv {
     home: Option<assert_fs::TempDir>,
     last_stdout: RefCell<String>,
+    github_mock: Option<MockServer>,
 }
 
 impl VdpmTestEnv {
     pub fn new() -> Self {
-        Self {
+        let env = Self {
             home: Some(assert_fs::TempDir::new().unwrap()),
             last_stdout: RefCell::new(String::new()),
+            github_mock: if should_use_real_github() {
+                None
+            } else {
+                Some(MockServer::start())
+            },
+        };
+
+        for name in [
+            known_plugins::STABLE_PLUGIN,
+            known_plugins::ANOTHER_STABLE_PLUGIN,
+        ] {
+            env.stub_plugin_source(name, 200, "# stub plugin content\n");
         }
+
+        env
     }
 
     fn home(&self) -> &assert_fs::TempDir {
         self.home.as_ref().unwrap()
     }
 
+    pub fn stub_plugin_source(&self, name: &str, status: u16, body: &str) {
+        let Some(mock) = &self.github_mock else {
+            return;
+        };
+        mock.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path_includes(format!("/{name}.py"));
+            then.status(status).body(body);
+        });
+    }
+
     pub fn run(&self, args: &[&str]) -> assert_cmd::assert::Assert {
-        let assert = assert_cmd::Command::cargo_bin("vdpm")
-            .unwrap()
-            .args(args)
-            .env("VDPM_HOME", self.home().path())
-            .assert();
+        let mut cmd = assert_cmd::Command::cargo_bin("vdpm").unwrap();
+        cmd.args(args).env("VDPM_HOME", self.home().path());
+        if let Some(mock) = &self.github_mock {
+            cmd.env("VDPM_GITHUB_BASE_URL", mock.base_url());
+        }
+        let assert = cmd.assert();
         *self.last_stdout.borrow_mut() = assert.stdout_string();
         assert
     }

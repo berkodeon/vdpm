@@ -2,7 +2,7 @@
 mod support;
 
 use support::known_plugins::STABLE_PLUGIN;
-use support::{AssertExt, VdpmTestEnv, env};
+use support::{env, AssertExt, VdpmTestEnv};
 
 #[rstest::rstest]
 fn test_install_adds_plugin_file(env: VdpmTestEnv) {
@@ -55,4 +55,22 @@ fn test_install_failure_for_other_plugin_leaves_existing_install_untouched(env: 
     let after = env.plugin_file_contents(STABLE_PLUGIN);
     assert_eq!(before, after);
     env.assert_not_installed("definitely-not-a-real-plugin-xyz");
+}
+
+#[rstest::rstest]
+fn test_install_fails_on_rate_limit(env: VdpmTestEnv) {
+    env.stub_plugin_source("some-plugin", 429, "rate limit exceeded");
+
+    env.try_install("some-plugin")
+        .assert_failure_containing("failed to download plugin");
+    env.assert_not_installed("some-plugin");
+}
+
+#[rstest::rstest]
+fn test_install_fails_on_server_error(env: VdpmTestEnv) {
+    env.stub_plugin_source("some-plugin", 500, "internal server error");
+
+    env.try_install("some-plugin")
+        .assert_failure_containing("failed to download plugin");
+    env.assert_not_installed("some-plugin");
 }
