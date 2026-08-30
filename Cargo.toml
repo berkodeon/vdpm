@@ -2,6 +2,24 @@
 name = "vdpm"
 version = "0.1.0"
 edition = "2024"
+description = "A small CLI for managing VisiData plugins"
+license = "Apache-2.0"
+repository = "https://github.com/berkodeon/vdpm"
+homepage = "https://github.com/berkodeon/vdpm"
+
+[package.metadata.deb]
+maintainer = "berkodeon <berkgeylani@gmail.com>"
+copyright = "2026, berkodeon"
+extended-description = """\
+A small CLI for managing VisiData plugins — install them, toggle them on and \
+off, and see what's currently active, without hand-editing .visidatarc."""
+depends = "$auto"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/vdpm", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/vdpm/README.md", "644"],
+]
 
 [dependencies]
 directories = "4.0"

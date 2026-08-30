@@ -1,6 +1,11 @@
 # vdpm
 
+[![Rust](https://github.com/berkodeon/vdpm/actions/workflows/rust.yml/badge.svg)](https://github.com/berkodeon/vdpm/actions/workflows/rust.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 A small CLI for managing [VisiData](https://www.visidata.org/) plugins — install them, toggle them on and off, and see what's currently active, without hand-editing `.visidatarc`.
+
+![vdpm demo](assets/demo.gif)
 
 VisiData plugins are just Python files you drop into a folder and `import` from your `.visidatarc`. That's fine when you have one or two, but it gets tedious fast: you're manually downloading files, remembering to add/remove import lines, and keeping track of what's actually installed versus enabled. `vdpm` does that bookkeeping for you.
 
@@ -21,6 +26,27 @@ VisiData plugins are just Python files you drop into a folder and `import` from 
 - A Rust toolchain supporting the 2024 edition (rustc 1.85+) if building from source.
 
 ## Installing
+
+### macOS (Homebrew)
+
+```sh
+brew tap berkodeon/vdpm
+brew install vdpm
+```
+
+### Debian / Ubuntu (.deb)
+
+Download the `.deb` from the [latest release](https://github.com/berkodeon/vdpm/releases/latest) and install it with `apt`:
+
+```sh
+sudo apt install ./vdpm_*_amd64.deb
+```
+
+### Prebuilt binaries
+
+Prebuilt archives for macOS (arm64/Intel) and Linux (x86_64) are attached to every [release](https://github.com/berkodeon/vdpm/releases) — download the one for your platform, extract it, and put the `vdpm` binary on your `PATH`.
+
+### From source
 
 ```sh
 git clone https://github.com/berkodeon/vdpm.git
