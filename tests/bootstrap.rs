@@ -3,14 +3,15 @@ mod support;
 
 use assert_fs::prelude::*;
 use support::known_plugins::STABLE_PLUGIN;
-use support::{env, VdpmTestEnv};
+use support::{Source, VdpmTestEnv, env};
 
 #[rstest::rstest]
 fn test_list_after_manual_visidatarc_deletion_recovers_enabled_state_from_registry(
     env: VdpmTestEnv,
 ) {
     // Given
-    env.install(STABLE_PLUGIN).enable(STABLE_PLUGIN);
+    env.install(STABLE_PLUGIN, Source::Default)
+        .enable(STABLE_PLUGIN);
     env.assert_enabled(STABLE_PLUGIN);
 
     std::fs::remove_file(env.visidatarc_path().path())
@@ -27,7 +28,8 @@ fn test_list_after_manual_visidatarc_deletion_recovers_enabled_state_from_regist
 #[rstest::rstest]
 fn test_list_recovers_from_missing_registry_csv_by_bootstrapping_from_visidatarc(env: VdpmTestEnv) {
     // Given
-    env.install(STABLE_PLUGIN).enable(STABLE_PLUGIN);
+    env.install(STABLE_PLUGIN, Source::Default)
+        .enable(STABLE_PLUGIN);
     env.plugins_csv_path().assert(predicates::path::exists());
 
     std::fs::remove_file(env.plugins_csv_path().path())

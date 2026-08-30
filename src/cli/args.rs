@@ -13,7 +13,11 @@ pub enum Commands {
     List,
     Enable { name: String },
     Disable { name: String },
-    Install { name: String },
+    Install {
+        name: String,
+        #[arg(long)]
+        source: Option<String>,
+    },
     Uninstall { name: String },
     Interactive,
 }
@@ -24,7 +28,11 @@ impl Display for Commands {
             Commands::List => write!(f, "list"),
             Commands::Enable { name } => write!(f, "enable {}", name),
             Commands::Disable { name } => write!(f, "disable {}", name),
-            Commands::Install { name } => write!(f, "install {}", name),
+            Commands::Install { name, source: None } => write!(f, "install {}", name),
+            Commands::Install {
+                name,
+                source: Some(source),
+            } => write!(f, "install {} --source {}", name, source),
             Commands::Uninstall { name } => write!(f, "uninstall {}", name),
             Commands::Interactive => write!(f, "interactive"),
         }

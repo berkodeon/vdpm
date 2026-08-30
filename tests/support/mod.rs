@@ -18,6 +18,25 @@ fn should_use_real_github() -> bool {
     std::env::var("VDPM_TEST_GITHUB_MODE").as_deref() == Ok("real")
 }
 
+pub fn github_mode_label() -> &'static str {
+    if should_use_real_github() { "real" } else { "mock" }
+}
+
+pub fn mode_suffixed(name: &str) -> String {
+    format!("{name}_{}", github_mode_label())
+}
+
+pub fn redact_mock_port_settings() -> insta::Settings {
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(r"127\.0\.0\.1:\d{5}", "127.0.0.1:XXXXX");
+    settings
+}
+
+pub enum Source<'a> {
+    Default,
+    Custom(&'a str),
+}
+
 pub struct VdpmTestEnv {
     home: Option<assert_fs::TempDir>,
     last_stdout: RefCell<String>,
@@ -99,8 +118,8 @@ impl VdpmTestEnv {
             .child(format!("{}/{}", s.vdpm_config_folder_path, s.plugin_manager_file))
     }
 
-    pub fn install(&self, name: &str) -> &Self {
-        self.try_install(name).success();
+    pub fn install(&self, name: &str, source: Source) -> &Self {
+        self.try_install(name, source).success();
         self
     }
     pub fn enable(&self, name: &str) -> &Self {
@@ -116,8 +135,11 @@ impl VdpmTestEnv {
         self
     }
 
-    pub fn try_install(&self, name: &str) -> assert_cmd::assert::Assert {
-        self.run(&["install", name])
+    pub fn try_install(&self, name: &str, source: Source) -> assert_cmd::assert::Assert {
+        match source {
+            Source::Custom(source) => self.run(&["install", name, "--source", source]),
+            Source::Default => self.run(&["install", name]),
+        }
     }
     pub fn try_enable(&self, name: &str) -> assert_cmd::assert::Assert {
         self.run(&["enable", name])

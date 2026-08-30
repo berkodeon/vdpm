@@ -90,43 +90,45 @@ impl Registry {
 
     fn generate_with(
         installed_plugins: HashSet<String>,
-        enabled_plugins: HashSet<String>,
-    ) -> Result<Self> {
-        let plugins: BTreeMap<String, Plugin> = installed_plugins
+        previously_enabled: &HashSet<String>,
+        persisted: Option<&Registry>,
+    ) -> Self {
+        let plugins = installed_plugins
             .into_iter()
-            .map(|plugin| {
-                let is_enabled: bool = enabled_plugins.contains(plugin.as_str());
-                (
-                    plugin.clone(),
-                    Plugin {
-                        name: plugin,
-                        installed: true,
-                        enabled: is_enabled,
-                    },
-                )
+            .map(|name| {
+                let source = persisted
+                    .and_then(|registry| registry.plugins.get(&name))
+                    .and_then(|plugin| plugin.source.clone());
+                let plugin = Plugin {
+                    name: name.clone(),
+                    enabled: previously_enabled.contains(&name),
+                    installed: true,
+                    source,
+                };
+                (name, plugin)
             })
             .collect();
 
-        Ok(Registry { plugins })
+        Registry { plugins }
     }
 
     pub async fn generate() -> Result<Self> {
-        let installed_plugins: HashSet<String> = Registry::get_installed_plugins()?;
-        let registry_path = get_registry_file_path()?;
+        let installed_plugins = Self::get_installed_plugins()?;
+        let persisted = Self::from_file(&get_registry_file_path()?).await.ok();
 
-        let enabled_plugins: HashSet<String> = match Self::from_file(&registry_path).await {
-            Ok(persisted) => persisted
+        let previously_enabled: HashSet<String> = match &persisted {
+            Some(registry) => registry
                 .plugins
                 .values()
                 .filter(|plugin| plugin.enabled)
                 .map(|plugin| plugin.name.clone())
                 .collect(),
-            Err(_) => Self::get_enabled_plugins_from_visidatarc()
+            None => Self::get_enabled_plugins_from_visidatarc()
                 .await
                 .unwrap_or_default(),
         };
 
-        let registry = Self::generate_with(installed_plugins, enabled_plugins)?;
+        let registry = Self::generate_with(installed_plugins, &previously_enabled, persisted.as_ref());
         registry.persist().await?;
 
         Ok(registry)

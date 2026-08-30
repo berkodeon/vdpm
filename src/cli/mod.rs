@@ -11,7 +11,9 @@ pub async fn run(command: &Commands) -> Result<Table> {
         Commands::List => commands::list::execute().await?,
         Commands::Enable { name } => commands::enable::execute(&name).await?,
         Commands::Disable { name } => commands::disable::execute(&name).await?,
-        Commands::Install { name } => commands::install::execute(&name).await?,
+        Commands::Install { name, source } => {
+            commands::install::execute(&name, source.as_deref()).await?
+        }
         Commands::Uninstall { name } => commands::uninstall::execute(&name).await?,
         Commands::Interactive => unreachable!("Interactive mode is handled in main!"),
     };

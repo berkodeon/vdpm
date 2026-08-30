@@ -2,6 +2,6 @@
 source: tests/uninstall.rs
 expression: output
 ---
-+------+---------+-----------+
-| name | enabled | installed |
-+------+---------+-----------+
++------+---------+-----------+--------+
+| name | enabled | installed | source |
++------+---------+-----------+--------+

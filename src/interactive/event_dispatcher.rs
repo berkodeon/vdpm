@@ -71,6 +71,7 @@ fn generate_operations(old_registry: &Registry, new_registry: &Registry) -> Vec<
             operations.push(PluginOperation {
                 command: Commands::Install {
                     name: plugin_name.clone(),
+                    source: None,
                 },
                 plugin: new_plugin.clone(),
             });
