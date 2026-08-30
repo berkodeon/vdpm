@@ -44,7 +44,7 @@ sudo apt install ./vdpm_*_amd64.deb
 
 ### Prebuilt binaries
 
-Prebuilt archives for macOS (arm64/Intel) and Linux (x86_64) are attached to every [release](https://github.com/berkodeon/vdpm/releases) — download the one for your platform, extract it, and put the `vdpm` binary on your `PATH`.
+Prebuilt archives for macOS (Apple Silicon) and Linux (x86_64) are attached to every [release](https://github.com/berkodeon/vdpm/releases) — download the one for your platform, extract it, and put the `vdpm` binary on your `PATH`.
 
 ### From source
 
