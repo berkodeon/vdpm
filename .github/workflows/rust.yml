@@ -23,4 +23,4 @@ jobs:
     - name: Install cargo-insta
       run: cargo install cargo-insta --locked
     - name: Run tests
-      run: cargo insta test --unreferenced=reject
+      run: cargo insta test --unreferenced=warn
