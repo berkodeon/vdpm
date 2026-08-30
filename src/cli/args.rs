@@ -1,3 +1,4 @@
+use crate::core::plugin::PluginName;
 use clap::{Parser, Subcommand};
 use std::fmt::{self, Display, Formatter};
 
@@ -11,14 +12,14 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     List,
-    Enable { name: String },
-    Disable { name: String },
+    Enable { name: PluginName },
+    Disable { name: PluginName },
     Install {
-        name: String,
+        name: PluginName,
         #[arg(long)]
         source: Option<String>,
     },
-    Uninstall { name: String },
+    Uninstall { name: PluginName },
     Interactive,
 }
 

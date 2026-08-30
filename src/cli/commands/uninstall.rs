@@ -1,14 +1,14 @@
 use crate::cli::commands::disable;
 use crate::config_loader;
-use crate::core::plugin::Plugin;
+use crate::core::plugin::{Plugin, PluginName};
 use crate::error::Result;
 use crate::utils::get_home_dir;
 use anyhow::Context;
 use tabled::Table;
 use tracing::info;
 
-pub async fn execute(name: &str) -> Result<Table> {
-    let plugin = Plugin::new(name, false, false, None)?;
+pub async fn execute(name: &PluginName) -> Result<Table> {
+    let plugin = Plugin::new(name.clone(), false, false, None);
 
     info!("Uninstall plugin({})!", plugin.name);
     let config = config_loader::load_or_create()?;

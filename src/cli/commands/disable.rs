@@ -1,3 +1,4 @@
+use crate::core::plugin::PluginName;
 use crate::core::registry::Registry;
 use crate::error::Result;
 use anyhow::Context;
@@ -9,7 +10,7 @@ use tracing::{info, instrument};
     skip_all,
     fields(plugin = %name)
 )]
-pub async fn execute(name: &str) -> Result<Table> {
+pub async fn execute(name: &PluginName) -> Result<Table> {
     info!(
         plugin = %name,
         "Starting disabling plugin!"
@@ -22,7 +23,7 @@ pub async fn execute(name: &str) -> Result<Table> {
         .cloned()
         .with_context(|| format!("plugin \"{name}\" is not installed"))?;
     plugin.enabled = false;
-    registry.plugins.insert(name.to_string(), plugin.clone());
+    registry.plugins.insert(plugin.name.clone(), plugin.clone());
 
     registry.persist().await?;
 

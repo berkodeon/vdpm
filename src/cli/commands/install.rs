@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::config_loader;
 
-use crate::core::plugin::Plugin;
+use crate::core::plugin::{Plugin, PluginName};
 use crate::core::registry::Registry;
 use crate::error::Result;
 use crate::github::GithubClient;
@@ -15,8 +15,8 @@ use tokio::io::AsyncWriteExt;
 use tracing::{debug, info, instrument, warn};
 
 #[instrument(level = "info", skip_all, fields(plugin = %name))]
-pub async fn execute(name: &str, source: Option<&str>) -> Result<Table> {
-    let mut plugin = Plugin::new(name, false, false, None)?;
+pub async fn execute(name: &PluginName, source: Option<&str>) -> Result<Table> {
+    let mut plugin = Plugin::new(name.clone(), false, false, None);
 
     let config = config_loader::load_or_create()?;
     debug!(
@@ -73,7 +73,7 @@ pub async fn execute(name: &str, source: Option<&str>) -> Result<Table> {
 }
 
 #[instrument(level = "debug", skip_all, fields(plugin = %name, path = %path.display()))]
-async fn create_plugin_file(name: &str, path: &PathBuf) -> Result<File> {
+async fn create_plugin_file(name: &PluginName, path: &PathBuf) -> Result<File> {
     if let Some(parent_path) = path.parent() {
         debug!(
             parent_path = %parent_path.display(),
@@ -93,7 +93,7 @@ async fn create_plugin_file(name: &str, path: &PathBuf) -> Result<File> {
         .context("failed to create plugin file")
 }
 
-fn default_plugin_url(name: &str) -> Result<String> {
+fn default_plugin_url(name: &PluginName) -> Result<String> {
     let config = config_loader::load_or_create()?;
     let visidata_version = format!("v{}", config.settings.vd_version);
     Ok(format!(
@@ -105,7 +105,7 @@ fn default_plugin_url(name: &str) -> Result<String> {
 }
 
 #[instrument(level = "info", skip_all, fields(plugin = %name))]
-async fn fetch_from_url(name: &str, url: &str) -> Result<String> {
+async fn fetch_from_url(name: &PluginName, url: &str) -> Result<String> {
     let url = rewrite_github_blob_url(url);
 
     info!(url = %url, "Downloading plugin");
@@ -119,7 +119,7 @@ async fn fetch_from_url(name: &str, url: &str) -> Result<String> {
     Ok(text)
 }
 
-async fn fetch_from_local_path(name: &str, path: &str) -> Result<String> {
+async fn fetch_from_local_path(name: &PluginName, path: &str) -> Result<String> {
     tokio::fs::read_to_string(path)
         .await
         .with_context(|| format!("failed to read local plugin file \"{path}\" for plugin \"{name}\""))

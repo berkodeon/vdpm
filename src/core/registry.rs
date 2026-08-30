@@ -1,5 +1,5 @@
 use crate::config_loader;
-use crate::core::plugin::Plugin;
+use crate::core::plugin::{Plugin, PluginName};
 use crate::error::Result;
 use crate::fs::operations::list_files_by_extension;
 use crate::fs::paths::get_registry_file_path;
@@ -9,10 +9,11 @@ use csv::WriterBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct Registry {
-    pub plugins: BTreeMap<String, Plugin>,
+    pub plugins: BTreeMap<PluginName, Plugin>,
 }
 
 impl Registry {
@@ -25,7 +26,7 @@ impl Registry {
             .has_headers(true)
             .from_reader(content.as_bytes());
 
-        let plugins: BTreeMap<String, Plugin> = reader
+        let plugins: BTreeMap<PluginName, Plugin> = reader
             .deserialize::<Plugin>()
             .collect::<std::result::Result<Vec<Plugin>, _>>()
             .context("failed to parse registry file as csv")?
@@ -89,8 +90,8 @@ impl Registry {
     }
 
     fn generate_with(
-        installed_plugins: HashSet<String>,
-        previously_enabled: &HashSet<String>,
+        installed_plugins: HashSet<PluginName>,
+        previously_enabled: &HashSet<PluginName>,
         persisted: Option<&Registry>,
     ) -> Self {
         let plugins = installed_plugins
@@ -116,7 +117,7 @@ impl Registry {
         let installed_plugins = Self::get_installed_plugins()?;
         let persisted = Self::from_file(&get_registry_file_path()?).await.ok();
 
-        let previously_enabled: HashSet<String> = match &persisted {
+        let previously_enabled: HashSet<PluginName> = match &persisted {
             Some(registry) => registry
                 .plugins
                 .values()
@@ -134,28 +135,41 @@ impl Registry {
         Ok(registry)
     }
 
-    fn get_installed_plugins() -> Result<HashSet<String>> {
+    fn get_installed_plugins() -> Result<HashSet<PluginName>> {
         let config = config_loader::load_or_create()?;
         let installed_plugins: HashSet<String> = list_files_by_extension(
             &get_home_dir().join(&config.settings.plugin_folder),
             "py".to_string(),
         );
-        Ok(installed_plugins)
+        Ok(installed_plugins
+            .into_iter()
+            .filter_map(|name| match name.parse::<PluginName>() {
+                Ok(name) => Some(name),
+                Err(err) => {
+                    warn!("skipping invalid plugin file name \"{name}\": {err}");
+                    None
+                }
+            })
+            .collect())
     }
 
-    async fn get_enabled_plugins_from_visidatarc() -> Result<HashSet<String>> {
+    async fn get_enabled_plugins_from_visidatarc() -> Result<HashSet<PluginName>> {
         let config = config_loader::load_or_create()?;
         let visidata_rc_content =
             tokio::fs::read_to_string(&get_home_dir().join(&config.settings.rc_file))
                 .await
                 .context("failed to read .visidatarc file")?;
 
-        let enabled_plugins: HashSet<String> = visidata_rc_content
+        let enabled_plugins: HashSet<PluginName> = visidata_rc_content
             .split("\n")
             .filter(|line| line.starts_with("import plugins."))
-            .filter_map(|line| {
-                line.strip_prefix("import plugins.")
-                    .map(|enabled_plugin| enabled_plugin.to_string())
+            .filter_map(|line| line.strip_prefix("import plugins."))
+            .filter_map(|name| match name.parse::<PluginName>() {
+                Ok(name) => Some(name),
+                Err(err) => {
+                    warn!("skipping invalid plugin name \"{name}\" in .visidatarc: {err}");
+                    None
+                }
             })
             .collect();
 
