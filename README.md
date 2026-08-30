@@ -1,57 +1,90 @@
-# 🧩 VisiData Plugin Manager (`vdpm`)
+# vdpm
 
-**`vdpm`** is a fast, extensible, and registry-aware plugin manager for [VisiData](https://www.visidata.org/), written in Rust.
-It helps users **discover, install, manage, and explain** plugins across official and custom registries — with minimal effort and maximum control.
+A small CLI for managing [VisiData](https://www.visidata.org/) plugins — install them, toggle them on and off, and see what's currently active, without hand-editing `.visidatarc`.
 
----
+VisiData plugins are just Python files you drop into a folder and `import` from your `.visidatarc`. That's fine when you have one or two, but it gets tedious fast: you're manually downloading files, remembering to add/remove import lines, and keeping track of what's actually installed versus enabled. `vdpm` does that bookkeeping for you.
 
-## ✨ Why?
+## Features
 
-VisiData’s plugin ecosystem is rich but underexplored.
-`vdpm` brings clarity, structure, and convenience to plugin management with a **CLI-first experience** — tailored for data power users and plugin developers alike.
+- **Install** a plugin by name — `vdpm` fetches it from VisiData's own [plugin loaders](https://github.com/saulpw/visidata/tree/develop/visidata/loaders), pinned to whatever version of `vd` you have installed, so you always get a compatible copy.
+- **Install from anywhere else** — pass `--source` with a GitHub URL (blob links are rewritten to raw automatically), any other HTTP(S) URL, or a local file path, for plugins that aren't in the official repo.
+- **Enable / disable** without uninstalling — flips the `import` line in `.visidatarc` on or off, leaving the file on disk untouched.
+- **Uninstall** — disables and deletes the plugin file in one step.
+- **List** everything you have installed, with its enabled/disabled state, in a clean table.
+- **Interactive mode** (`vdpm interactive`) — opens your plugin registry as a spreadsheet *inside VisiData itself*. Toggle a plugin's `enabled` column, save, and `vdpm` watches the file, diffs what changed, and applies it for real (enabling/disabling/installing/uninstalling as needed). Managing your plugins by editing a table of plugins, in the tool the plugins are for, is the whole point.
+- **Self-healing registry** — the list of installed plugins (`plugins.csv`) is regenerated from the actual plugin folder and `.visidatarc` every time you run a command, so a deleted or corrupted registry file just gets rebuilt instead of breaking things.
+- **Validated plugin names** — names are restricted to letters, digits, `_`, and `-` at every entry point (CLI args and the registry file alike), so a stray or hand-edited row in `plugins.csv` can't smuggle something unexpected into `.visidatarc`.
 
----
+## Requirements
 
-## 🔧 What Can It Do?
+- [VisiData](https://www.visidata.org/) installed and on your `PATH` as `vd` — `vdpm` shells out to `vd -v` on every run to detect your version, and `interactive` mode launches `vd` directly.
+- A Rust toolchain supporting the 2024 edition (rustc 1.85+) if building from source.
 
-- 🔍 **Search** plugins by name, group, or tag
-- 📦 **Install** plugins from official or custom registries (URL-based or local)
-- 📁 **List** installed plugins with status and metadata
-- 📴 **Disable/Enable** plugins without deleting them
-- 📚 **Explain** plugins by parsing docstrings and README content
-- 🌍 **Support multiple registries** (Docker-style config)
-- 🔄 (Planned) **Auto-update**, version pinning, and deprecation tracking
+## Installing
 
----
+```sh
+git clone https://github.com/berkodeon/vdpm.git
+cd vdpm
+cargo install --path .
+```
 
-## 💡 Designed For
+This installs the `vdpm` binary to your cargo bin directory.
 
-- 🧑‍💻 **Plugin developers** who want a dev-friendly workflow (local sandbox support coming soon)
-- 🗂️ **Data wranglers** who install and test many plugins
-- ⚡ **CLI enthusiasts** who appreciate speed, clarity, and minimal dependencies
+## Usage
 
----
+```sh
+vdpm list                          # show installed plugins and their status
+vdpm install toml                  # install the official "toml" plugin
+vdpm install my_plugin --source https://github.com/me/my_plugin/blob/main/my_plugin.py
+vdpm install local_plugin --source ./my_plugin.py
+vdpm enable toml                   # activate it in .visidatarc
+vdpm disable toml                  # deactivate it without deleting the file
+vdpm uninstall toml                # disable + remove the plugin file
+vdpm interactive                   # edit your plugins as a spreadsheet in VisiData
+```
 
-## 📦 Plugin Registries
+By default, plugin files live in `~/.visidata/plugins`, the registry is `~/.config/vdpm/plugins.csv`, and activation happens through `~/.visidatarc` — all configurable in `config.toml`.
 
-`vdpm` supports static or dynamic registries:
+Two environment variables are recognized: `VDPM_HOME` overrides the home directory `vdpm` operates in (handy for sandboxing or testing), and `VDPM_GITHUB_BASE_URL` overrides the GitHub raw-content host used for the default plugin source.
 
-```json
-[
-  {
-    ???
-  }
-]
-'''
+## Developer guide
 
----
+### Build
 
-## Testing
+```sh
+cargo build
+cargo run -- list
+```
 
-`tests/` contains a black-box scenario test suite (`rstest` + `assert_cmd` + `assert_fs` + `insta`) that drives the real compiled `vdpm` binary as a subprocess and asserts on its actual behavior. Ground rules for contributing tests here:
+### Run the tests
 
-- **Arrange state only via real CLI calls** (`env.install(...)`, `env.enable(...)`, etc. on `VdpmTestEnv` in `tests/support/mod.rs`) — never hand-write files into the test's home directory. If a scenario needs a plugin installed, install it through the CLI, don't fabricate the `.py`/`.visidatarc` state directly.
-- **Tests hit real GitHub on purpose** for the happy path (plugin downloads). Only the "install a nonexistent plugin" failure case is effectively mocked, and it's mocked for free — a deliberately-bogus plugin name gets a real 404 from GitHub, no mocking library involved.
-- **Requires real VisiData installed**, pinned to the version in [`.visidata-version`](.visidata-version) (currently `3.1.1`) — CI reads the same file, so bumping the tested version is a one-line change in one place. Every `vdpm` invocation shells out to `vd -v` at startup, even for read-only commands like `list`.
-- **`VDPM_HOME` is the isolation seam**, not `$HOME` — the harness points each test at its own temp directory via `VDPM_HOME`, which `get_home_dir()` checks before falling back to the real home dir. Never mutate the real `$HOME` from a test.
-- Run with `cargo insta test`; review new/changed snapshots with `cargo insta review`.
+```sh
+cargo test
+```
+
+Tests are black-box: they run the real compiled `vdpm` binary against a temp `VDPM_HOME` (via `assert_cmd`/`assert_fs`) and assert on its actual behavior — file contents, `.visidatarc` state, exit codes. By default, plugin downloads are served by a local mock server (`httpmock`), so the suite needs no network access. To instead run against real GitHub:
+
+```sh
+VDPM_TEST_GITHUB_MODE=real cargo test
+```
+
+Either way, you'll need `vd` installed and on `PATH`, pinned to the version in [`.visidata-version`](.visidata-version) — every `vdpm` invocation checks it at startup, even for read-only commands.
+
+Several tests use [`insta`](https://insta.rs/) for snapshot assertions. Install the companion tool once:
+
+```sh
+cargo install cargo-insta --locked
+cargo insta test      # run tests, capture new/changed snapshots for review
+cargo insta review    # accept or reject pending snapshot changes
+```
+
+CI (`.github/workflows/rust.yml`) installs the pinned VisiData version, builds, and runs `cargo insta test --unreferenced=reject` on every PR.
+
+A few ground rules for contributing tests, enforced by convention rather than the compiler:
+
+- Arrange state through the CLI (`env.install(...)`, `env.enable(...)`, etc., via `VdpmTestEnv` in `tests/support/mod.rs`), not by hand-writing files into the test's home directory — unless the test is specifically about recovering from a corrupted/hand-edited registry, in which case that's the point.
+- Never touch the real `$HOME`. `VDPM_HOME` is the isolation seam — `get_home_dir()` checks it before falling back to the real home directory, and `VdpmTestEnv` sets it to a fresh temp dir per test.
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE).
